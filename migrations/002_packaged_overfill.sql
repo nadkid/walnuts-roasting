@@ -1,0 +1,2 @@
+ALTER TABLE stocks ADD COLUMN overfill_mg INTEGER NOT NULL DEFAULT 0 CHECK(overfill_mg>=0);
+ALTER TABLE entries ADD COLUMN delta_overfill_mg INTEGER NOT NULL DEFAULT 0;

@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ORIGIN: https://${APP_DOMAIN:?Set your actual APP_DOMAIN in .env}
+      COOKIE_SECURE: "1"
+    volumes:
+      - walnuts_data:/data
+    expose:
+      - "8765"
+    stop_grace_period: 30s
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set your actual APP_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+volumes:
+  walnuts_data:
+  caddy_data:
+  caddy_config:

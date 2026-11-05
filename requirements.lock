@@ -1,0 +1,4 @@
+# Application dependencies: none.
+# Python >=3.12, standard library only (sqlite3, ssl/OpenSSL, zoneinfo).
+# Native browser ES modules: no npm dependencies, CDN assets or build dependencies.
+# OS timezone data and CA roots are required; keep the Python/OS runtime patched.

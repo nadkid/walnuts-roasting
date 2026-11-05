@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Walnuts backup at 03:00 Tokyo
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Asia/Tokyo
+Persistent=true
+Unit=walnuts-backup.service
+
+[Install]
+WantedBy=timers.target

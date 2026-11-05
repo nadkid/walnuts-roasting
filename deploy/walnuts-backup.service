@@ -1,0 +1,11 @@
+[Unit]
+Description=Consistent Walnuts Roastery database backup
+
+[Service]
+Type=oneshot
+User=walnuts
+Group=walnuts
+WorkingDirectory=/opt/walnuts-roastery
+ExecStart=/bin/sh /opt/walnuts-roastery/deploy/backup-daily.sh
+UMask=0077
+NoNewPrivileges=true

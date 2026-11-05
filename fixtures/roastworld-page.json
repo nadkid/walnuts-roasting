@@ -1,0 +1,14 @@
+{
+  "page": 1,
+  "size": 100,
+  "total": 1,
+  "totalPages": 1,
+  "data": [{
+    "uid": "fictional-roast-001",
+    "beanId": "example-bean-komorebi",
+    "roastName": "Fictional fixture roast",
+    "dateTime": 1793840400000,
+    "weightGreen": 1000,
+    "weightRoasted": 850
+  }]
+}

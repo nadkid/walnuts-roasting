@@ -1,0 +1,1 @@
+CREATE TABLE wholesale_orders(order_id TEXT PRIMARY KEY REFERENCES orders(id),customer_json TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('DRAFT','CONFIRMED','CANCELLED')),terms TEXT NOT NULL DEFAULT '',reference TEXT NOT NULL DEFAULT '',version INTEGER NOT NULL DEFAULT 1);

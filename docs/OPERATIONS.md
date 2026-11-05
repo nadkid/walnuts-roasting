@@ -1,0 +1,135 @@
+# Using the roastery workspace
+
+## Start with counts, not historical totals
+
+Keep RoasTime controlling the Bullet. Walnuts Roastery does not send roast-control commands.
+
+Configure coffee/profile policies, packages, locations and external bean/variant mappings first. Set the intended cutover timestamp in Settings → Connections. Before cutover, imported roasts become batch history with a zero-balance stock scope. A missing cutover makes all imported roasts history-only. No unknown yield is used to invent stock.
+
+Count the actual remaining coffee by batch. Open its Stock row → Historical opening count, record the net weight and a reason. For already packaged coffee, establish the total measured opening bulk equivalent, then use packing and transfers to represent its present form and location. Explain that these are onboarding classifications in the movement reasons. Do not also record the same bags as an additional positive count. The combined opening scopes must reconcile to the actual physical total.
+
+New valid post-cutover source roasts create measured production once. Repeating a source import cannot create it again. Moving the cutover later does not rewrite previously posted stock. Correct any onboarding mistake with a reviewed adjustment/reversal.
+
+If a bean is roasted into multiple different profiles, do not give it an indiscriminate bean mapping. Keep its ambiguous records queued and enter reviewed manual batches until a precise mapping arrangement is established. A source display name is not a stable inventory identity.
+
+## Daily work
+
+**Today** shows production conflicts, resting batches, floor stock and connection status. Unconnected or stale sources stay visible; manual work continues during provider failures.
+
+**Record a roast:** enter the actual time, green input and measured roasted output. Only output becomes stock. The batch snapshots the coffee’s policy. A future roast belongs in the plan. Complete an approved plan from its queue so actual output replaces its expected supply once. For an already imported production batch, open its detail and use “Link completed plan” with a match-confirmation reason; this replaces expected supply without posting production again.
+
+**Transfer:** choose a source batch/location/form and a destination. Filling a hopper or moving beans to café storage does not consume coffee. Give individual hoppers/containers their own location names if you will count them separately. Open packaged bags with “Open bags into bulk”; it transfers the actual contents, including recorded overfill, to the selected bulk scope.
+
+**Pack:** choose a package definition and whole bag count. Nominal content plus separately measured overfill and loss leaves bulk. Nominal content and overfill remain physical packaged stock; only loss leaves physical inventory. Packaged overfill is apportioned by the stock scope’s average, with integer remainder retained until the final bag moves. Keep physically distinguishable packing runs in separate named containers if their overfill differs materially.
+
+**Café usage:** record measured consumption, or count actual remaining net weight for that scope. Use one method for the same interval. A count is a reconciliation to the present measured amount, not an extra usage deduction. Counts reject stale versions if a colleague acts while the form is open. Waste/sample/dial-in/staff-use reasons can be typed in the note field.
+
+**Retail sale:** choose the actual packaged batch, oldest eligible first, and a whole bag count. This is a physical deduction. Record Square transactions only once; future POS import would need an explicit cutover/reconciliation with manual sales.
+
+**Return:** an administrator must confirm physical receipt into a quality-held batch with a reason. Set a hold before using the return action; decide separately whether to release it. A Shopify refund does not restore coffee.
+
+**Count:** affects only the chosen batch/location/form. Packaged counts use whole units, bulk counts use grams. A count does not overwrite unrelated scopes. Enter the physical amount after considering already logged usage; do not apply the same interval’s consumption again.
+
+**Correction:** open a batch’s movement history and reverse the incorrect transaction with a reason, or make a scoped count adjustment. Reversals link to the original and are rejected if they would spend committed stock. Shipment corrections require a reviewed physical return/count, not a blind reversal of Shopify fulfillment.
+
+## Orders and allocations
+
+Map every Shopify variant by its stable ID to a coffee/profile and net package definition. Mark merchandise non-coffee. Unspecified sample boxes/bundles remain unresolved and cannot silently disappear from the inbox.
+
+Set a local dispatch/pickup deadline. Paid, uncancelled, unfulfilled coffee is eligible by default; the administrator can change payment eligibility. A line can use several batches. Allocate stock in oldest-roast order, considering readiness and freshness by the actual deadline. The server prevents over-reservation and reservation against a different coffee/package. Bulk may be reserved before packing. The planner counts only complete variant-sized bags per stock scope for online coverage; it conservatively leaves partial remnants available for café/other use. Transfer compatible scopes of the same batch together before packing if you want to use those remnants; do not silently mix different batches. Split-bag allocations are visibly flagged for review. A reserved amount stays on hand and reduces free stock only.
+
+“Pack allocation” converts whole-bag bulk allocations to the variant’s package size and moves the same reservation to the packed scope. For explicit packing loss/overfill, release the allocation, pack with variance, then reallocate. Replace fractional bulk allocations when they cannot become whole bags independently; this release does not increase physical stock.
+
+Shopify order source fields remain read-only. Cancellations/reductions release only excess outstanding commitments, incompatible mappings release affected commitments, and partial fulfillment retains remaining demand. Previously reserved coffee for a now-confirmed shipment can be picked once the remaining-order commitments have been reconciled.
+
+When Shopify reports an external fulfillment, the app creates a task. Record the actual package/batch picks across all coffee fulfillment lines. It checks the exact confirmed units and deducts physical stock once, using the fulfillment ID. It never guesses provenance or sends a customer notification. If the shipment actually violated a quality/rest rule, an administrator must review an audited batch override before reconciling it; do not quietly waive the rule.
+
+## Rest and quality
+
+Café brewing, online dispatch and retail sale have independent elapsed-day policies. Dispatch can be earlier than brew readiness only when explicitly configured. No assumed transit time is added. All display times are Asia/Tokyo; storage uses UTC offsets consistently.
+
+A roast at 5 November, 10:00 JST with five elapsed days of rest becomes ready at 10 November, 10:00 JST. Held and archived stock remains in physical counts but cannot satisfy use/allocation. The freshness window is an operational quality window, not an invented safety expiry.
+
+Coffee policy edits affect new batches only. An administrator can explicitly recalculate an existing batch against the current policy, or override its days with a reason. Review affected reservations; the app flags those made ineligible. Holds/releases and overrides have audit records.
+
+## Planning
+
+Use one-off dated café consumption forecasts and dated **total** desired retail stock, plus online line deadlines. Repeated wall minimums retain earlier target coverage while checking freshness again; they are not fresh daily sales demand. If future retail sales are expected, update the target/forecast after recording those actual sales. There is no automated Square sales forecast.
+
+The planner processes deadlines in chronological order with configurable tie priorities. Each free gram is spent once; owned reservations cover only their requirement. Real resting stock can cover a future deadline if ready then. Approved plans are expected supply. Completed plans are excluded because their actual batch now supplies stock. Held/expired supply is ineligible.
+
+For uncovered demand, measured historical yield wins over the labeled fallback estimate. Whole working-charge batches are proposed within maximum capacity. Rounding excess is carried into later suggestions. Start slots and weekdays constrain suggested roast dates; an expired deadline is flagged, never silently waived. A reviewed suggestion can depend on the proposed earlier suggestions/carryover, so approve and recheck the queue after each batch. Plans are not reservations or inventory.
+
+This is a straightforward reviewable planner, not global optimization. It does not infer recipe doses, sales growth, transport times or a roast schedule for you.
+
+## Order sorting and filters
+
+Orders defaults to all imported orders, newest placement first. Use Sort by for oldest/newest placement or earliest/latest local deadline. Order status (Open/Archived/Cancelled), fulfillment, payment and production state can be combined. Search by order number/item, check the visible/total count, or Clear filters. Dates display in JST and filters remain selected during automatic refresh. Shopify ordinary order access is limited to its recent-order permission window; older history still requires approved access and a deliberate backfill.
+
+## Manual wholesale orders
+
+Choose Orders → New wholesale order. Enter the business/customer name, optional contact/email/phone and address, PO/reference, payment terms, delivery method and deadline in JST. Add one or more configured coffees, actual weight per bag in grams, whole bag quantity and grind/preparation. Custom bag sizes become package definitions that can be used for packing. Configure the actual coffee/profile and dispatch-rest rules under Settings first.
+
+Save a draft to keep it out of production demand. Confirmed wholesale orders enter the same rest-aware allocation and roast-planning calculation as online orders, including pending invoice/credit-term orders. Use the Channel filter or customer/reference search to find them. Wholesale records remain local and never create Shopify orders or notifications.
+
+Edit customer/deadline/status details from Edit wholesale order. Release allocations before changing a committed line’s coffee, size or quantity. Keep dispatched lines in the order; total quantity cannot drop below already dispatched units. Cancelling releases outstanding reservations without returning shipped coffee to stock. Concurrent edits are rejected using an order version.
+
+Allocate and pack using the existing actions, then Record dispatch with the actual packed batches. Partial dispatches deduct only the selected bags and leave the remaining demand open. Own allocations can be consumed by the dispatch; other orders’ commitments remain protected. Confirm physical dispatch only after delivery/handover has actually occurred. Payment status tracking and terms are operational fields; invoicing/accounting is outside this screen.
+
+## Roast.World fresh start — 5 November 2026
+
+The live import start and production cutover are set to 5 November 2026, 00:00 Asia/Tokyo (4 November 15:00 UTC). Unposted source roasts before that time are skipped before bean/weight validation. The 2,092 historic import-review exceptions were resolved with an audit entry and a consistent database backup; original source snapshots remain retained. Replaying all 2,092 cached source records leaves those reviews resolved. Shopify exceptions and physical stock history were preserved. Existing posted batches still receive source-edit reconciliation checks even if their source dates move earlier than the cutoff.
+
+New on/after-cutoff roasts require an exact bean-to-coffee mapping, a credible timestamp and actual positive green and roasted weights. Valid new production posts once, using measured output and the configured rest policy. Missing data on new records remains an actionable exception. Any roasted coffee already on hand requires a separate confirmed opening count; weighing green stock alone does not establish roasted stock. Adjust the import start or opening-stock cutover under Settings → Connections → Configure if deliberately reviewing this policy later.
+
+### Green beans, purchases and roast consumption
+Open **Green beans** in the navigation. Add each physical green bean (name, origin,
+variety, process, notes, currency), then select every roast coffee/profile using
+that stock. Multiple profiles, such as espresso and filter, can share one balance.
+Roast.World external bean IDs still need to be mapped to those coffee profiles
+under Settings; green stock links do not replace source import mappings.
+
+For beans already here, weigh all remaining green stock and use **Count stock**.
+For new arrivals, use **Record purchase**: kilograms received, receipt time in JST,
+total bean price, supplier, invoice and lot references. Price can be left blank;
+blank is different from a zero-cost receipt. JPY uses whole yen; other supported
+currencies use cents. Pricing is recorded in the selected bean's currency without
+currency conversion, taxes or valuation assumptions. Purchases record physical
+receipts, not unreceived purchase orders or payments to suppliers.
+
+Expected stock is receipts minus measured green roast charges, reconciled to the
+latest physical count. Counts apply as of saving. Late imports dated before that
+count are retained in history but do not subtract green beans already accounted
+for in the count. Deductions use green input, never roasted output; manual and
+imported production use the same path. Duplicate imports never deduct twice.
+Historical batches and roasted opening counts do not consume current green stock.
+Source edits remain reconciliation tasks and do not silently rewrite deductions.
+
+Unlinked production is displayed on the green screen. Linking a profile deducts
+unposted green charges at the original roast times. Already-posted deductions
+retain their original bean if the profile is relinked. A count opened before any
+new purchase, roast, link or correction is rejected as stale. Negative expected
+balances are displayed for review so missing opening counts or receipts do not
+block valid roast imports. Plans show projected needs and stock after plans;
+scheduling alone never consumes physical green stock. These needs include linked
+profiles only, so finish the links before using the projection.
+
+History keeps purchases, counts, roast batch codes and corrections. Administrators
+can reverse an incorrect purchase from **History**, then enter the corrected
+receipt. Correct a physical count with a new count. Reversing production through
+the batch ledger reverses its green charge too; a later physical count remains the
+baseline. History is immutable, and green records are included in ledger exports
+and normal SQLite backups. No sample beans or purchases are added to production.
+
+### Entering purchase prices with a green bean
+**Add green bean** and the first **Record purchase** (when no beans exist) now open
+one form with the bean, currency, quantity received, price per kg and total price.
+Enter either price; the other is calculated. A quantity saves a dated receipt in
+the same transaction as the bean. Leave purchase details blank to create just the
+bean. **Edit / link** can also append a received purchase without replacing past
+prices. For later arrivals, **Purchase** opens the same price-entry fields.
+Prices, quantities, supplier, invoice reference and currency are kept per receipt,
+linked to the physical green bean. Total prices use the currency's minor units;
+unit-price entries calculate a receipt total rounded half up to those units.
+Unknown prices remain unknown. This preserves purchase data for future costing
+and margin reports; the current latest price is not a calculated sales margin.
