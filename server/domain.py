@@ -95,7 +95,7 @@ def movement(db,d,actor,request_id):
     if kind=='reverse':
         if not d.get('reason'): raise ValueError('A correction reason is required.')
         original=one(db,'SELECT * FROM movements WHERE id=?',(d['reversal_of'],))
-        if original['kind'] in ('reserve','release','reverse','history','shipment'): raise ValueError('Use an explicit audited adjustment for this operation.')
+        if original['kind'] in ('reserve','release','reverse','history','shipment','square_sale'): raise ValueError('Use an explicit audited adjustment for this operation.')
         es=rows(db,'SELECT stock_id,delta_mg,delta_overfill_mg FROM entries WHERE movement_id=?',(original['id'],))
         for e in es: delta(db,m,e['stock_id'],-e['delta_mg'],-e['delta_overfill_mg'])
         from .green import reverse_production

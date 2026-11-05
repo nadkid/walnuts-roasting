@@ -11,7 +11,7 @@ from .planner import plan
 from .wholesale import save_order,dispatch_order
 from .auth import password_hash,login,token_hash
 from .adapters import Scheduler
-from . import green
+from . import green,products,square
 
 LIMIT=2*1024*1024
 
@@ -49,7 +49,7 @@ def state(db,user,scheduler):
         runs=rows(db,'SELECT * FROM sync_runs WHERE source=? ORDER BY started_at DESC,rowid DESC LIMIT 1',(source,));success=rows(db,"SELECT finished_at FROM sync_runs WHERE source=? AND status='success' ORDER BY finished_at DESC LIMIT 1",(source,))
         last=success[0]['finished_at'] if success else None
         sync[source]={'configured':configured and not cfg['demo'],'last_attempt':runs[0] if runs else None,'last_success':last,'stale':not last or (dt(stamp())-dt(last)).total_seconds()>cfg['poll_seconds']*2}
-    return {'user':{k:user[k] for k in ('id','name','role')},'settings':cfg,'clock':clock,'shop_admin_url':('https://'+os.environ['SHOPIFY_SHOP']+'/admin') if re.fullmatch(r'[a-z0-9][a-z0-9-]*\.myshopify\.com',os.getenv('SHOPIFY_SHOP','')) else None,'green':green.snapshot(db),'stocks':stocks,'batches':batches,'orders':orders,'coffees':rows(db,'SELECT * FROM coffees'),'locations':rows(db,'SELECT * FROM locations'),'packages':rows(db,'SELECT * FROM packages'),'reservations':rows(db,'SELECT r.*,b.code FROM reservations r JOIN stocks s ON s.id=r.stock_id JOIN batches b ON b.id=s.batch_id'),'variants':rows(db,'SELECT * FROM variants'),'bean_mappings':rows(db,'SELECT * FROM bean_mappings'),'demands':rows(db,'SELECT * FROM demands'),'plans':rows(db,'SELECT p.*,c.name coffee FROM plans p JOIN coffees c ON c.id=p.coffee_id ORDER BY roast_at'),'issues':rows(db,'SELECT * FROM issues WHERE resolved=0 ORDER BY created_at DESC'),'sync':sync,'planner':plan(db),'fulfillments':rows(db,'SELECT * FROM fulfillment_events WHERE recorded=0'),'imports':rows(db,"SELECT source,external_id,payload FROM imports WHERE source IN ('beans','roastworld')"),'users':rows(db,'SELECT id,name,role,active FROM users') if user['role']=='admin' else []}
+    return {'user':{k:user[k] for k in ('id','name','role')},'settings':cfg,'clock':clock,'shop_admin_url':('https://'+os.environ['SHOPIFY_SHOP']+'/admin') if re.fullmatch(r'[a-z0-9][a-z0-9-]*\.myshopify\.com',os.getenv('SHOPIFY_SHOP','')) else None,'products':products.snapshot(db),'square':square.snapshot(db),'green':green.snapshot(db),'stocks':stocks,'batches':batches,'orders':orders,'coffees':rows(db,'SELECT * FROM coffees'),'locations':rows(db,'SELECT * FROM locations'),'packages':rows(db,'SELECT * FROM packages'),'reservations':rows(db,'SELECT r.*,b.code FROM reservations r JOIN stocks s ON s.id=r.stock_id JOIN batches b ON b.id=s.batch_id'),'variants':rows(db,'SELECT * FROM variants'),'bean_mappings':rows(db,'SELECT * FROM bean_mappings'),'demands':rows(db,'SELECT * FROM demands'),'plans':rows(db,'SELECT p.*,c.name coffee FROM plans p JOIN coffees c ON c.id=p.coffee_id ORDER BY roast_at'),'issues':rows(db,'SELECT * FROM issues WHERE resolved=0 ORDER BY created_at DESC'),'sync':sync,'planner':plan(db),'fulfillments':rows(db,'SELECT * FROM fulfillment_events WHERE recorded=0'),'imports':rows(db,"SELECT source,external_id,payload FROM imports WHERE source IN ('beans','roastworld')"),'users':rows(db,'SELECT id,name,role,active FROM users') if user['role']=='admin' else []}
 
 class Server(ThreadingHTTPServer):
     daemon_threads=True
@@ -92,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200,{'movements':rows(db,'SELECT m.*,e.delta_mg,e.delta_overfill_mg,s.location_id,s.package_id FROM entries e JOIN movements m ON m.id=e.movement_id JOIN stocks s ON s.id=e.stock_id WHERE s.batch_id=? ORDER BY m.at DESC,m.rowid DESC',(batch,)),'audit':rows(db,'SELECT * FROM audit ORDER BY id DESC LIMIT 200')})
                 if path=='/api/export':
                     if user['role']!='admin':return self.send(403,{'error':'Administrator access required.'})
-                    return self.send(200,{'exported_at':stamp(),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
+                    return self.send(200,{'exported_at':stamp(),'sale_products':rows(db,'SELECT * FROM sale_products'),'sale_catalog':rows(db,'SELECT * FROM sale_catalog'),'square_sales':rows(db,'SELECT * FROM square_sales'),'square_sale_picks':rows(db,'SELECT * FROM square_sale_picks'),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
                 return self.send(404,{'error':'Unknown endpoint.'})
             relative='index.html' if path=='/' else path.lstrip('/')
             f=(ROOT/'static'/relative).resolve()
@@ -149,12 +149,12 @@ class Handler(BaseHTTPRequestHandler):
             user=self.session(db)
             if not user:return self.send(401,{'error':'Session expired. Sign in again.'})
             if not secrets.compare_digest(self.headers.get('X-CSRF-Token',''),user['csrf']):return self.send(403,{'error':'Session token missing. Reload and retry.'})
-            admin=path in ('/api/settings','/api/coffee','/api/package','/api/location','/api/user','/api/variant','/api/bean-map','/api/csv-preview','/api/csv-commit','/api/retry-import','/api/batch-policy','/api/issue','/api/order-import','/api/sync','/api/roast-import','/api/green-reverse') or (path=='/api/move' and d.get('kind') in ('reverse','return'))
+            admin=path in ('/api/settings','/api/coffee','/api/package','/api/location','/api/user','/api/variant','/api/bean-map','/api/csv-preview','/api/csv-commit','/api/retry-import','/api/batch-policy','/api/issue','/api/order-import','/api/sync','/api/roast-import','/api/green-reverse','/api/product-map','/api/product-map-batch','/api/square-config','/api/square-retry','/api/square-acknowledge') or (path=='/api/move' and d.get('kind') in ('reverse','return'))
             if admin and user['role']!='admin':return self.send(403,{'error':'Administrator access required.'})
             actor=user['name'];request=self.headers.get('Idempotency-Key','')
             if path=='/api/sync':
                 source=d['source']
-                if source not in ('roastworld','shopify'):raise ValueError('Unknown connection.')
+                if source not in ('roastworld','shopify','square'):raise ValueError('Unknown connection.')
                 threading.Thread(target=self.server.scheduler.sync,args=(source,),daemon=True).start();return self.send(202,{'status':'queued'})
             with transaction(db):result=self.mutate(db,path,d,actor,user,request)
             return self.send(200,result or {'ok':True},cookie=self.cookie(expired=True) if path=='/api/logout' else None)
@@ -170,6 +170,11 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/batch-notes':
             one(db,'SELECT id FROM batches WHERE id=?',(d['id'],))
             db.execute('UPDATE batches SET notes=? WHERE id=?',(d['notes'],d['id']));audit(db,actor,'batch_notes',d);return
+        if path=='/api/product-map-batch':return products.approve_batch(db,d,actor,request)
+        if path=='/api/product-map':return products.approve(db,d,actor,request)
+        if path=='/api/square-config':return square.configure(db,d,actor)
+        if path=='/api/square-retry':square.retry_sales(db);return
+        if path=='/api/square-acknowledge':return square.acknowledge(db,d,actor)
         if path=='/api/green-bean':return green.save_bean(db,d,actor,request)
         if path=='/api/green-purchase':return green.receive(db,d,actor,request)
         if path=='/api/green-count':return green.count(db,d,actor,request)
@@ -221,7 +226,7 @@ class Handler(BaseHTTPRequestHandler):
             if kind=='coffee' and (not c or not p):raise ValueError('Choose a coffee and net package size.')
             db.execute('UPDATE variants SET kind=?,coffee_id=?,package_id=?,grind=? WHERE id=?',(kind,c,p,d.get('grind',''),v['id']))
             if kind!='unresolved':db.execute("UPDATE issues SET resolved=1 WHERE source='shopify' AND external_id=? AND kind='variant_mapping'",(v['id'],))
-            audit(db,actor,'variant_mapping',d);return
+            audit(db,actor,'variant_mapping',d);products.seed_shopify(db);return
         if path=='/api/bean-map':
             db.execute('INSERT INTO bean_mappings VALUES (?,?) ON CONFLICT(external_id) DO UPDATE SET coffee_id=excluded.coffee_id',(d['external_id'],d['coffee_id']));audit(db,actor,'bean_mapping',d);return
         if path=='/api/roast-import':return roast_import(db,d,actor)

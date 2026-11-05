@@ -24,7 +24,7 @@ If a bean is roasted into multiple different profiles, do not give it an indiscr
 
 **Café usage:** record measured consumption, or count actual remaining net weight for that scope. Use one method for the same interval. A count is a reconciliation to the present measured amount, not an extra usage deduction. Counts reject stale versions if a colleague acts while the form is open. Waste/sample/dial-in/staff-use reasons can be typed in the note field.
 
-**Retail sale:** choose the actual packaged batch, oldest eligible first, and a whole bag count. This is a physical deduction. Record Square transactions only once; future POS import would need an explicit cutover/reconciliation with manual sales.
+**Retail sale:** choose the actual packaged batch, oldest eligible first, and a whole bag count. This is a physical deduction. After enabling Square imports, use manual sale entry only for transactions outside the Square import. Confirm the manual/import start to prevent overlap.
 
 **Return:** an administrator must confirm physical receipt into a quality-held batch with a reason. Set a hold before using the return action; decide separately whether to release it. A Shopify refund does not restore coffee.
 
@@ -133,3 +133,40 @@ linked to the physical green bean. Total prices use the currency's minor units;
 unit-price entries calculate a receipt total rounded half up to those units.
 Unknown prices remain unknown. This preserves purchase data for future costing
 and margin reports; the current latest price is not a calculated sales margin.
+
+
+### Product mapping and Square retail-wall sales
+Open **Products & POS**. Existing Shopify mappings appear under shared products.
+Filter catalogue entries to Square and Needs mapping; review each coffee’s
+suggested shared product, roast profile and bag size. A 150g bag must point to the
+150g product even when source names/SKUs differ. Select and exclude drinks and
+merchandise in batches. Mapping decisions persist by source item identity across
+renames. Catalogue edits that change weight require review. Bundles need an
+explicit composition model and must remain unresolved.
+
+Before enabling deductions, establish actual packaged wall balances using the
+existing batch opening/count, pack and transfer actions. Under **Configure shop &
+start date**, choose the cutover after the last manually covered sale and enable
+automatic oldest-batch deductions. Staff should sell oldest eligible wall coffee
+first. The first configured shop is in preview mode until this setup is done.
+
+Each receipt deducts whole bags only from compatible, ready, unreserved wall
+stock, preserving batch provenance and measured overfill. Other locations/bulk
+are never guessed as substitutes. Pending receipts are atomic: no partial stock
+is deducted while another line remains unresolved. Review the receipt’s reason,
+fix mapping or physical stock, then **Retry pending deductions**. A receipt dated
+before a wall count needs manual reconciliation. **Already covered by a count**
+is available only for unposted receipts and requires a reason/reference. It
+acknowledges a sale already counted/logged without making another stock movement.
+Refunds/returns do not add physical stock. A posted receipt changed in Square
+retains its original batch picks and raises an exception.
+
+### Square Beans category scope
+Square mapping and receipt processing are limited to the category named **Beans**.
+The first sync resolves its exact category ID and saves it; later syncs follow that
+identity. Modern category memberships, legacy category IDs and reporting category
+IDs are read from the parent item. Other variations stay outside the mapping
+screen and never consume bean stock. Mixed receipts retain and deduct only the
+Bean-category lines in the dashboard. Existing unrelated previews are archived as
+outside scope without deleting history or reversing physical stock. If the category
+cannot be resolved, syncing stops visibly rather than including the whole catalogue.

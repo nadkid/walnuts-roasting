@@ -12,7 +12,7 @@ The small Python/SQLite/native-JavaScript stack removes third-party runtime pack
 | Roast source fields | Roast.World | external `uid` |
 | Local notes, holds, overrides, deadlines | This app | batch/order IDs and audit records |
 | Orders/payment/confirmed fulfillment | Shopify | GraphQL order/line/variant/fulfillment IDs |
-| Physical POS sale | Manual here initially; Square later | future stable source event ID, reconciled cutover |
+| Physical POS sale | Square completed receipt; this app owns stock ledger | Square order ID, source version, immutable batch picks |
 
 No Shopify variants are created per roast. No external write is implemented. A refund is not a stock receipt. A missing source roast is not a delete request. An imported historical output is not a present balance.
 
@@ -50,8 +50,29 @@ Use an HTTPS reverse proxy and expose only it. The app’s lightweight HTTP list
 - Simple app-level roles, not SSO, MFA, tenant isolation or per-location permissions.
 - One coffee/profile per batch. No blending or cross-batch pooling; use explicit multiple allocations/picks to preserve provenance.
 - Bundles stay unresolved until components are explicitly modeled; automatic bundle composition is not supplied.
-- Square is a declared adapter boundary, not a live integration. No automatic café dose or retail forecasts.
+- Square imports completed fixed-bag retail receipts with FIFO wall picks. Café dose estimates, retail sales forecasts, Square webhooks and outbound platform inventory updates remain deferred.
 - English interface; shared labels are organized for localization, but full Japanese translation is not implemented.
 - Readable printable batch labels include a direct batch URL. No camera scanner, generated QR code or proprietary printer dependency.
 - Shopify shipping-method titles and delivery categories are imported when supplied; missing pickup details and operational deadlines are locally confirmed. Full addresses/payment details are intentionally not collected.
 - Configured brand color is a source CSS variable; the wordmark is a placeholder, not a claim about established branding.
+
+## Shared products and Square sales
+
+`server/products.py` connects separate Shopify and Square catalogue identities to
+`(coffee_id, package_id)` products. Candidate products exist for configured coffee
+and package combinations; only linked products appear in the shared-product list.
+Suggestions use normalized names, source aliases and bag weights, with explicit
+admin approval. Weight changes flag the mapping for review. Bundles/assortments
+remain unresolved. Grind-on-request can share packaged whole-bean stock; separately
+stocked ground coffee requires its own coffee/profile.
+
+`server/square.py` strips provider payloads down to inventory/financial fields. A
+receipt is validated completely before any stock movement: each coffee line must
+have a reviewed fixed-bag mapping, eligible wall stock, no incompatible modifier
+weight and no overlapping wall count. All lines share a temporary free-stock map,
+so two lines cannot spend the same bags. Inside one immediate transaction, a
+source-derived movement key posts immutable quantity/overfill entries and immutable
+batch picks, then stamps the receipt as posted. Replay cannot repeat it. Later
+source inventory changes flag review and retain the original picks. Generic
+movement reversal cannot reverse Square sales; refunds require physical-return
+reconciliation. The deduplicated source tables are included in ledger export.

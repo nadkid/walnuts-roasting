@@ -85,4 +85,49 @@ Roast.World supplies roast source records; Shopify owns orders/payment/fulfillme
 
 Outbound Shopify stock writes are not enabled. Before adding them, define owned locations/SKUs, reconcile physical counts, handle Shopify’s committed quantities and avoid subtracting reservations twice. A roast/pack event must never auto-fulfill an order. See the official [inventory quantities/states guide](https://shopify.dev/docs/apps/build/inventory-management-apps/manage-quantities-states) and [inventory state definitions](https://help.shopify.com/en/manual/inventory-and-locations/fundamentals/inventory-states) when implementing that later phase.
 
-Square automatic imports are also deferred. The adapter boundary requires stable event IDs and a reviewed manual/import overlap cutover. Do not retroactively import Square sales on top of the same manually recorded physical deductions.
+Square sales use the read-only integration described below, with an explicit manual/import cutover.
+
+
+## Square catalogue and retail sales
+
+1. Open [Square Developer Console](https://developer.squareup.com/apps), create or
+   open your own application, choose **Production → Credentials**, and copy the
+   production access token into the live app’s `.env` as `SQUARE_ACCESS_TOKEN`.
+   Do not paste tokens in chat, source code or GitHub. A personal token supports
+   this single-merchant integration; a scoped OAuth token can instead use
+   `ITEMS_READ`, `ORDERS_READ`, and `MERCHANT_PROFILE_READ`. Keep any OAuth token
+   refreshed outside this app; a multi-merchant OAuth installation UI is deferred.
+2. `SQUARE_ENVIRONMENT=production` is the default; `sandbox` uses Square’s separate
+   sandbox host and token. Restart the server after editing credentials.
+3. Open **Products & POS** and sync Square. It lists catalogue items/variations and
+   active shop locations. With one active location, initial setup selects it for
+   preview only. Catalogue and recent receipt imports never enable deductions.
+4. Review mappings. Platform ID namespaces remain separate; approved external IDs
+   point to one internal coffee/profile + package product. SKU equality is not
+   required. Name/weight suggestions are never silently applied. Existing Shopify
+   mappings seed shared products, and the full Shopify catalogue is also read.
+5. Exclude café drinks/merchandise; establish actual packaged wall stock; then set
+   the exact start timestamp and enable deductions under **Configure shop & start
+   date**. Avoid overlap with previously logged manual sales.
+
+Square is pinned to API `2026-09-16`. Catalogue and location reads plus paginated
+`SearchOrders` calls use fixed official hosts. Orders are fetched by updated time
+with a ten-minute overlap. The watermark advances only after complete success.
+A changed preview start/location resets it for a reviewed backfill. Start/location
+changes are locked once stock has posted. Background polling runs each minute;
+Square webhooks and outbound platform inventory writes are not implemented.
+
+Only completed, itemised, fixed-bag receipts at the chosen shop qualify. Returns,
+fulfillment orders, measured sales and custom amounts require review. Square can
+deliver offline transactions later; a receipt older than a wall physical count is
+held for reconciliation so counted sales do not get deducted twice.
+
+Stored receipts contain item IDs, bag quantities, dates, money/tax/discount values
+and batch picks. Customer identities, addresses, payment card/tender details and
+tokens are not stored in receipt records or logs. Refunds do not create physical
+returns automatically. These money fields support future costing work; no sales
+margin calculation or platform payment/refund operation is performed.
+
+References: [access tokens](https://developer.squareup.com/docs/build-basics/access-tokens),
+[catalogue](https://developer.squareup.com/reference/square/catalog-api/list-catalog),
+[order search](https://developer.squareup.com/reference/square/orders-api/search-orders).

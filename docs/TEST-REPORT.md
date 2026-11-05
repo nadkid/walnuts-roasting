@@ -47,7 +47,7 @@ Screenshots are delivered alongside the source. The persistent demo includes the
 
 **Prepared, not deployed/tested on infrastructure:** Docker Compose, Caddy certificates/reverse proxy, systemd service/timer, offsite encrypted backup storage, real browser devices and public internet access. No server, domain or live credentials were supplied. The local listener was bound to loopback only. This is not a claim of a completed security audit or high-load test.
 
-**Deferred:** automatic Square imports, outbound Shopify inventory/fulfillment writes, multi-merchant OAuth installation UI, blends/cross-batch pooling, bundle-component modeling, automated recipe-dose forecasts, Japanese translation, QR scanning and label-printer integration.
+**Deferred:** Square webhooks and outbound Square writes, outbound Shopify inventory/fulfillment writes, multi-merchant OAuth installation UI, blends/cross-batch pooling, bundle-component modeling, automated recipe-dose forecasts, Japanese translation, QR scanning and label-printer integration.
 
 ## Reproduce
 
@@ -92,3 +92,27 @@ prices. Added transaction/idempotency, rollback and unit-price rounding checks.
 Isolated browser QA verified the empty-catalogue path: 30 kg at JPY 2,400/kg saves
 one linked JPY 72,000 receipt, displays its price in history, and preserves it
 through reload. No sample purchases were entered into production.
+
+
+## Square integration — 5 November 2026
+99 Python tests pass, plus JavaScript syntax and existing order-view checks. New
+coverage includes fixed 100g/150g/250g bags, independent platform IDs/SKUs sharing
+one product, explicit suggestions, renamed and changed-weight catalogue entries,
+pagination, stale versions, failed-sync watermarks, permission checks and stripped
+customer/payment payloads. FIFO spans batches, apportions overfill and protects
+other locations, held/resting stock and reservations. Receipt replay, insufficient
+stock, multiple lines, refunds, source edits and late receipts before physical
+counts were exercised.
+
+Live read verification authenticated Square, imported 191 variations and 314
+completed receipt previews, and retained preview mode with zero Square ledger
+movements. 44 existing Shopify coffee mappings were reused. Isolated browser QA
+approved a differently named Square/Shopify 100g pair, excluded a café drink,
+enabled sample deductions and posted a two-bag/200g FIFO pick. All browser writes
+used fictional demo data. Production opening balances and Square mapping approvals
+remain user setup; no new production stock or automatic mappings were invented.
+
+Beans category scope: 102 tests pass. Added mixed-category receipt deduction and
+display tests, drinks-only import exclusion, and archival of existing unrelated
+previews. Live Square category resolution found one Beans category with 47
+variations. Automatic deductions remain in preview mode.

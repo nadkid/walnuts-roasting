@@ -1,8 +1,8 @@
 # Walnuts Roastery
 
-A self-hosted operations app for Walnuts Coffee, Tokyo. It tracks green-bean purchases, receipt prices and expected balances; actual roasted stock by batch, location and form; wholesale and online orders; reservations, rest policies, café usage, physical retail sales and a dated roast plan.
+A self-hosted operations app for Walnuts Coffee, Tokyo. It tracks actual roasted stock by batch, location and form, with a movement ledger, reservations, use-specific resting policies, café usage, physical retail sales, online allocations and a dated roast plan.
 
-**Status:** implemented and locally exercised with a real shared SQLite database. Includes Shopify and Roast.World adapters, with fixture and local workflow checks. A hosted server/domain has not been provisioned. Credentials, databases, user accounts and real customer/stock records are excluded from this repository.
+**Status:** implemented and locally exercised with a real shared SQLite database. Shopify and Roast.World adapters are fixture-tested, not connected to your accounts. Production is hosted at https://walnuts-roasting.fly.dev/. No real business stock or credentials are included.
 
 ## Open the isolated demo
 
@@ -53,9 +53,17 @@ The implementation uses Python’s standard library and native browser modules i
 ```sh
 python3 -m unittest discover -s tests -v
 node --check static/app.js  # optional syntax check; Node is not a runtime requirement
+node tests/order-view.mjs
+node tests/today-view.mjs
 ```
 
 The HTTP tests open a temporary loopback port. All tests use disposable databases. See [TEST-REPORT.md](docs/TEST-REPORT.md) for actual verification and limits.
+
+## Today dashboard
+
+Today starts with orders for the earliest outstanding dispatch/pickup day in Tokyo time, including overdue orders. Cancelled, archived, fully fulfilled orders and wholesale drafts are excluded; orders without a deadline are flagged for review. Fulfillment and production states are shown separately. Production priorities show the first three requirements by roast deadline, with the full queue under Roast plan.
+
+The bean overview combines roast profiles linked to the same green bean without duplicating its green balance. Green stock below **5 kg** is highlighted red; unlinked profiles show an unknown green balance. **Rested** means physical roasted stock meeting its batch's café policy. **Ready to ship** means packaged net weight meeting the dispatch policy, including allocated bags. These columns can overlap; both exclude quality holds, archived batches and out-of-policy stock. Café and retail panels show physical quantities per bean, including overfill, with held/archived quantities labelled. Connections and reconciliation remain in Settings.
 
 ## Deploy, connect and maintain
 
@@ -83,28 +91,39 @@ Backup/restore refuse to overwrite files; restore clears sessions so users sign 
 
 A server and domain, actual coffee/SKU mapping and opening counts, confirmed dispatch/retail/freshness rules, actual maximum Bullet capacity and roast start slots, and credentials entered privately into the server environment. No paid AI calls, inventory subscription or paid authentication provider is required. Hosting, backups, electricity/internet and maintenance may still cost money.
 
-Square is the confirmed POS. Automatic Square sales imports, outbound Shopify inventory/fulfillment writes, blend pooling, automatic bundle composition, dose estimates, native scanning and printer integrations are deferred. Manual measured usage, physical sales, returns and counts work now. Multi-batch order fulfillment uses explicit separate allocations/picks; provenance is never pooled away.
+Square is the confirmed POS. Outbound Shopify inventory/fulfillment writes, blend pooling, automatic bundle composition, dose estimates, native scanning and printer integrations are deferred. Manual measured usage, physical sales, returns and counts work now. Multi-batch order fulfillment uses explicit separate allocations/picks; provenance is never pooled away.
 
 ## Local live startup (sync fix)
 
-Double-click `Start live.command` to use the existing production database. Startup now loads the project `.env` automatically; exported process variables take precedence. On this Mac, `SSL_CERT_FILE=/etc/ssl/cert.pem` uses the trusted system certificates. The live launcher is for loopback HTTP (`APP_ORIGIN=http://127.0.0.1:8765`, `COOKIE_SECURE=0`); use HTTPS/secure cookies when deploying remotely. Restart after changing credentials. `Start demo.command` remains isolated and does not sync.
+Double-click `Start live.command` to open the hosted production app at https://walnuts-roasting.fly.dev/. The old local database is retained as a migration fallback; keep real operations on the hosted site. Startup now loads the project `.env` automatically; exported process variables take precedence. On this Mac, `SSL_CERT_FILE=/etc/ssl/cert.pem` uses the trusted system certificates. The live launcher is for loopback HTTP (`APP_ORIGIN=http://127.0.0.1:8765`, `COOKIE_SECURE=0`); use HTTPS/secure cookies when deploying remotely. Restart after changing credentials. `Start demo.command` remains isolated and does not sync.
 
 ## Manual wholesale orders
 
 Refresh Orders and choose **+ New wholesale order**. Enter customer details, coffee/profile, weight per bag, bag quantity, delivery/pickup deadline, payment terms and notes. Drafts stay out of production demand; confirmed orders count even when payment is due by invoice. Allocate/pack as usual and record actual partial or full dispatch. The Channel filter separates Wholesale and Shopify. See OPERATIONS.md for edits, cancellation and stock rules.
 
-## Green beans and purchase prices
+## Square retail-wall integration
 
-Use **Green beans → Add green bean** to enter the bean, currency and optional first
-purchase together. Enter kilograms received and either **Price per kg** or
-**Total purchase price**; the other calculates automatically. Each receipt keeps
-its quantity, cost, supplier, invoice and lot references linked to the bean.
-For later arrivals use **Record purchase**. Costs are retained for future margin
-reports; sales-margin calculation is not yet implemented.
+Add `SQUARE_ACCESS_TOKEN` privately to `.env`, restart, and open **Products & POS**.
+The read-only connection imports Square catalogue variations and completed receipts.
+A single active Square shop is selected in preview mode; multiple locations require
+an explicit choice. Existing Shopify coffee/package mappings are reused. Review
+Square’s name/weight suggestions and link each coffee bag to the shared product.
+Use **Exclude selected items** for café drinks and merchandise.
 
-Link every relevant roast profile to its physical green bean. Actual production
-deducts its measured green charge exactly once; multiple profiles can share one
-balance. Use **Count stock** for an opening physical balance. Late source imports
-dated before a count are already covered by that count. Roast.World source bean
-mappings are configured separately under Settings. See OPERATIONS.md for full
-count, correction and import-cutover rules.
+After establishing packed retail-wall opening stock, choose the deduction start
+and enable automatic deductions under **Configure shop & start date**. Every
+completed sale deducts whole bags from the oldest eligible, unreserved wall batch,
+across batches if needed. Duplicate receipts never deduct twice. Unknown mappings,
+insufficient stock, refunds and receipts predating counts stay in reconciliation.
+See CONNECTIONS.md and OPERATIONS.md for setup and corrections.
+
+## Fly.io production
+
+Production is running at https://walnuts-roasting.fly.dev/ on one always-running
+512 MB shared-CPU Machine in Tokyo with a 1 GB encrypted persistent volume. Volume
+snapshots retain 14 days; independent migration/backup copies are also kept locally.
+The current database and existing login were migrated on 5 November 2026; copied
+sessions were cleared. Shopify, Square and Roast.World passed hosted sync checks.
+Square remains in Beans-only preview mode until mappings and physical wall stock
+are ready. The local production service is stopped and Start live.command opens
+the hosted URL. See docs/FLY.md for future deployments, backup and recovery.

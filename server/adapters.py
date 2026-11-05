@@ -58,6 +58,14 @@ class Shopify:
             if 'data' not in data:raise SyncError('Missing Shopify query data.')
             return data['data']
         raise SyncError('Shopify throttled synchronization. Retry later.')
+    def catalog(self):
+        after=None
+        while True:
+            result=self.query('query($after:String){productVariants(first:100,after:$after){nodes{id title sku product{title} selectedOptions{name value}} pageInfo{hasNextPage endCursor}}}',{'after':after})['productVariants']
+            for v in result['nodes']:
+                yield {'id':v['id'],'name':v['product']['title'],'variation':' / '.join(x['value'] for x in v.get('selectedOptions',[])) or v['title'],'sku':v.get('sku') or ''}
+            if not result['pageInfo']['hasNextPage']:return
+            after=result['pageInfo']['endCursor']
     def orders(self,since):
         after=None
         while True:
@@ -83,9 +91,9 @@ class Shopify:
 
 class Scheduler:
     def __init__(self,path):self.path=path;self.lock=threading.Lock();self.stop=threading.Event();self.wake=threading.Event()
-    def configured(self):return {'roastworld':bool(os.getenv('ROASTWORLD_API_KEY')),'shopify':bool(os.getenv('SHOPIFY_SHOP') and (os.getenv('SHOPIFY_ACCESS_TOKEN') or os.getenv('SHOPIFY_CLIENT_SECRET')))}
+    def configured(self):return {'roastworld':bool(os.getenv('ROASTWORLD_API_KEY')),'shopify':bool(os.getenv('SHOPIFY_SHOP') and (os.getenv('SHOPIFY_ACCESS_TOKEN') or os.getenv('SHOPIFY_CLIENT_SECRET'))),'square':bool(os.getenv('SQUARE_ACCESS_TOKEN'))}
     def sync(self,source):
-        if source not in ('roastworld','shopify'):raise ValueError('Unknown connection.')
+        if source not in ('roastworld','shopify','square'):raise ValueError('Unknown connection.')
         if not self.lock.acquire(False):return {'status':'busy'}
         db=connect(self.path);run=uid()
         try:
@@ -106,19 +114,29 @@ class Scheduler:
                 with transaction(db):
                     for b in rows(db,'SELECT external_id FROM batches WHERE external_id IS NOT NULL'):
                         if b['external_id'] not in seen:issue(db,source,b['external_id'],'missing_source','Previously imported roast is absent from this complete sync. Stock and history are preserved; verify with the provider.')
+            elif source=='square':
+                from .square import sync
+                result=sync(self,db,started);count=result['records']
             else:
+                from . import products
+                api=Shopify()
+                for item in api.catalog():
+                    with transaction(db):
+                        db.execute("INSERT OR IGNORE INTO variants(id,sku,kind) VALUES (?,?,'unresolved')",(item['id'],item['sku']))
+                        products.upsert(db,'shopify',item)
                 cfg=settings(db)
                 # Repair the formerly unquoted date query with a full initial-window backfill.
                 since=(cfg.get('shopify_watermark') if cfg.get('shopify_import_version')==2 else None) or stamp(dt(stamp())-timedelta(days=59))
                 since=stamp(dt(since)-timedelta(minutes=10))
-                for record in Shopify().orders(since):
+                for record in api.orders(since):
                     with transaction(db):order_import(db,record)
                     count+=1
                 with transaction(db):
                     db.execute('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',('shopify_watermark',json.dumps(started)))
                     db.execute('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',('shopify_import_version',json.dumps(2)))
                     db.execute('UPDATE webhook_deliveries SET processed_at=? WHERE processed_at IS NULL AND received_at<=?',(stamp(),started))
-            message=(f'{count} records checked; {ignored} before import start; {review} need review') if source=='roastworld' else f'{count} records reconciled'
+                    products.seed_shopify(db)
+            message=result['message'] if source=='square' else (f'{count} records checked; {ignored} before import start; {review} need review') if source=='roastworld' else f'{count} records reconciled'
             with transaction(db):db.execute('UPDATE sync_runs SET finished_at=?,status=?,message=? WHERE id=?',(stamp(),'success',message,run))
             return {'status':'success','records':count}
         except Exception as e:
@@ -127,14 +145,12 @@ class Scheduler:
             return {'status':'error','message':message}
         finally:db.close();self.lock.release()
     def loop(self):
+        next_regular=0
         while not self.stop.is_set():
-            configured=self.configured()
-            for source in ('shopify','roastworld'):
-                if configured[source]:self.sync(source)
-            db=connect(self.path);seconds=max(60,int(settings(db)['poll_seconds']));db.close();self.wake.wait(seconds);self.wake.clear()
-
-class PhysicalSalesAdapter:
-    """Square boundary: future verified events must use movement(request_id='square:'+event_id).
-    Never auto-match previously entered manual sales. Reconcile the overlap before enabling.
-    """
-    def import_events(self):raise NotImplementedError('Square live imports are deferred; use manual sales and scoped counts.')
+            configured=self.configured();db=connect(self.path);cfg=settings(db);db.close()
+            if configured['square']:self.sync('square')
+            if time.monotonic()>=next_regular or self.wake.is_set():
+                for source in ('shopify','roastworld'):
+                    if configured[source]:self.sync(source)
+                next_regular=time.monotonic()+max(60,int(cfg['poll_seconds']))
+            self.wake.clear();self.wake.wait(max(60,int(cfg.get('square_poll_seconds',60))) if configured['square'] else max(60,int(cfg['poll_seconds'])))

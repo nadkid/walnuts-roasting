@@ -87,3 +87,15 @@ class HTTP(unittest.TestCase):
         e=next(e for e in s['green']['events'] if e['bean_id']==b['id'] and e['kind']=='purchase')
         self.assertEqual(self.request('green-reverse',{'event_id':e['id'],'reason':'Fixture'},'http-green-reverse')[0],403)
         self.request('logout',{});self.login();_,export,_=self.request('export');self.assertTrue(any(x['id']==b['id'] for x in export['green_beans']));self.assertTrue(any(x['bean_id']==b['id'] for x in export['green_events']))
+
+    def test_shared_product_mapping_is_admin_only_and_square_preview_is_visible(self):
+        from server import products
+        db=connect(self.path)
+        with transaction(db):
+            products.seed_shopify(db)
+            products.upsert(db,'square',{'id':'http-square-fixture','name':'Example Kiri coffee beans','variation':'100g'})
+        item=next(i for i in products.snapshot(db)['catalog'] if i['external_id']=='http-square-fixture');pid=next(p['id'] for p in products.snapshot(db)['products'] if p['coffee_id']=='c1' and p['weight_mg']==100000);db.close()
+        payload={'source':'square','external_id':item['external_id'],'version':item['version'],'kind':'coffee','product_id':pid}
+        self.login(True);self.assertEqual(self.request('product-map',payload,'http-map-staff')[0],403);self.assertEqual(self.request('square-config',{'enabled':True})[0],403)
+        self.request('logout',{});self.login();self.assertEqual(self.request('product-map',payload,'http-map-admin')[0],200)
+        _,s,_=self.request('state');v=next(i for i in s['products']['catalog'] if i['external_id']==item['external_id']);self.assertEqual(v['product_id'],pid);self.assertFalse(s['settings']['square_enabled']);self.assertIn('square',s['sync'])
