@@ -15,7 +15,7 @@ class HTTP(unittest.TestCase):
         db.close();cls.server=Server(('127.0.0.1',0),cls.path);cls.thread=threading.Thread(target=cls.server.serve_forever,daemon=True);cls.thread.start();cls.base='http://127.0.0.1:'+str(cls.server.server_port)
     @classmethod
     def tearDownClass(cls):cls.server.shutdown();cls.server.server_close();cls.thread.join();cls.temp.cleanup()
-    def setUp(self):self.client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()));self.csrf=None
+    def setUp(self):self.server.login_attempts.clear();self.client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()));self.csrf=None
     def request(self,path,data=None,key=None,origin=None,csrf=True):
         headers={'Content-Type':'application/json','Origin':origin or self.base}
         if csrf and self.csrf:headers['X-CSRF-Token']=self.csrf
@@ -40,6 +40,50 @@ class HTTP(unittest.TestCase):
         self.assertEqual(self.request('move',count,'smoke-count')[0],200);self.assertEqual(self.request('move',count,'stale-count')[0],400)
         _,history,_=self.request('history?batch='+b['batch_id']);self.assertEqual(len(history['movements']),7)
         self.request('logout',{});self.assertEqual(self.request('state')[0],401);self.login(True);_,state,_=self.request('state');self.assertEqual(sum(s['quantity_mg'] for s in state['stocks'] if s['batch_id']==b['batch_id']),700000)
+    def test_staff_adds_found_stock_without_green_then_reviews_unknown_date(self):
+        self.login(True)
+        _,before,_=self.request('state');green_before=before['green']['beans']
+        payload={'coffee_id':'c2','grams':'125.125','location_id':'cafe','reason':'Found a missed container','code':'HTTP-FOUND-STOCK'}
+        status,result,_=self.request('roasted-stock',payload,'http-found-stock');self.assertEqual(status,200,result)
+        self.assertTrue(self.request('roasted-stock',payload,'http-found-stock')[1]['duplicate'])
+        _,after,_=self.request('state');b=next(b for b in after['batches'] if b['id']==result['batch_id'])
+        s=next(s for s in after['stocks'] if s['id']==result['stock_id'])
+        self.assertTrue(b['stock_only']);self.assertEqual(b['green_mg'],0);self.assertEqual(b['output_mg'],0)
+        self.assertEqual(s['quantity_mg'],125125);self.assertFalse(s['readiness']['brew']['eligible'])
+        self.assertEqual(after['green']['beans'],green_before)
+        review={'id':b['id'],'roasted_at':'2026-10-20T01:00:00Z','reason':'Matched original container label'}
+        self.assertEqual(self.request('batch-policy',review)[0],403)
+        self.request('logout',{});self.login()
+        self.assertEqual(self.request('batch-policy',review)[0],200)
+        _,after,_=self.request('state');s=next(s for s in after['stocks'] if s['id']==result['stock_id'])
+        self.assertTrue(s['readiness']['brew']['eligible']);self.assertEqual(s['quantity_mg'],125125)
+        self.assertEqual(after['green']['beans'],green_before)
+        ordinary=next(b for b in after['batches'] if not b['history_only'])
+        self.assertEqual(self.request('batch-policy',{**review,'id':ordinary['id']})[0],400)
+
+    def test_roasted_stock_requires_session_csrf_idempotency_and_reason(self):
+        payload={'coffee_id':'c2','grams':'100','reason':'Found coffee'}
+        self.assertEqual(self.request('roasted-stock',payload,'not-signed-in')[0],401)
+        self.login(True)
+        self.assertEqual(self.request('roasted-stock',payload,'no-csrf',csrf=False)[0],403)
+        self.assertEqual(self.request('roasted-stock',payload)[0],400)
+        self.assertEqual(self.request('roasted-stock',{**payload,'reason':''},'no-reason')[0],400)
+
+    def test_profit_read_and_shipping_are_authenticated_audited_and_csrf_protected(self):
+        self.assertEqual(self.request('profit')[0],401)
+        self.login(True)
+        status,report,_=self.request('profit');self.assertEqual(status,200);self.assertIn('rows',report)
+        payload={'order_id':'example-o1','version':0,'currency':'JPY','mode':'pickup','parcels':[],'reason':'Customer collected order'}
+        self.assertEqual(self.request('order-shipping',payload,'shipping-no-csrf',csrf=False)[0],403)
+        self.assertEqual(self.request('order-shipping',payload)[0],400)
+        _,before,_=self.request('state');weights={r['id']:r['quantity_mg'] for r in before['stocks']}
+        self.assertEqual(self.request('order-shipping',payload,'http-shipping')[0],200)
+        self.assertTrue(self.request('order-shipping',payload,'http-shipping')[1]['duplicate'])
+        self.assertEqual(self.request('order-shipping',payload,'http-shipping-stale')[0],400)
+        _,after,_=self.request('state');order=next(o for o in after['orders'] if o['id']=='example-o1')
+        self.assertEqual(order['shipping']['mode'],'pickup');self.assertEqual(order['shipping']['version'],1)
+        self.assertEqual({r['id']:r['quantity_mg'] for r in after['stocks']},weights)
+
     def test_auth_csrf_authorization_and_no_secret_leak(self):
         self.assertEqual(self.request('state')[0],401);headers=self.login(True);self.assertIn('HttpOnly',headers['Set-Cookie']);self.assertIn('SameSite=Strict',headers['Set-Cookie'])
         self.assertEqual(self.request('settings',{'poll_seconds':60})[0],403);self.assertEqual(self.request('logout',{},csrf=False)[0],403);self.assertEqual(self.request('logout',{},origin='https://attacker.example')[0],403)

@@ -89,6 +89,45 @@ def create_batch(db,d,actor,request_id,external=None,history=False):
     if plan: db.execute("UPDATE plans SET status='completed' WHERE id=?",(plan,))
     return {'batch_id':id,'movement_id':m}
 
+def add_roasted_stock(db,d,actor,request_id):
+    """Physical coffee found outside production; never create a green charge.
+
+    A new stock-only batch uses the existing historical/opening-stock marker and
+    zero production weights. It is excluded from green reconciliation, measured
+    yields and plan completion, while retaining normal batch-level stock rules.
+    """
+    m,repeat=begin_move(db,'stock_addition',actor,d,request_id)
+    if repeat:
+        scope=one(db,'SELECT s.id,s.batch_id FROM entries e JOIN stocks s ON s.id=e.stock_id WHERE e.movement_id=?',(m,))
+        return {'movement_id':m,'batch_id':scope['batch_id'],'stock_id':scope['id'],'duplicate':True}
+    reason=str(d.get('reason','')).strip()
+    if not reason:raise ValueError('Explain why this roasted stock is being added.')
+    package=d.get('package_id') or 'bulk'
+    extra=weight(d.get('overfill_g') or 0)
+    if extra<0:raise ValueError('Measured overfill cannot be negative.')
+    if package=='bulk':
+        q=positive(d['grams'])
+        if extra:raise ValueError('Overfill applies only to packaged bags.')
+    else:
+        p=one(db,'SELECT * FROM packages WHERE id=?',(package,))
+        units=int(d.get('units',0))
+        if units<=0 or str(units)!=str(d.get('units')):raise ValueError('Enter a positive whole number of bags.')
+        q=positive(Decimal(units*p['weight_mg'])/1000)
+    if d.get('batch_id'):
+        b=one(db,'SELECT * FROM batches WHERE id=?',(d['batch_id'],))
+        if b['archived']:raise ValueError('Restore this batch from archive before adding stock.')
+        batch=b['id']
+    else:
+        c=one(db,'SELECT * FROM coffees WHERE id=?',(d['coffee_id'],))
+        roasted=stamp(d['roasted_at']) if d.get('roasted_at') else None
+        if roasted and dt(roasted)>dt(now(db)):raise ValueError('The roast date cannot be in the future.')
+        batch=uid();code=str(d.get('code') or '').strip() or 'STOCK-'+dt(now(db)).astimezone(JST).strftime('%y%m%d')+'-'+batch[:4].upper()
+        db.execute('INSERT INTO batches(id,code,coffee_id,roasted_at,policy,notes,history_only) VALUES (?,?,?,?,?,?,1)',(batch,code,c['id'],roasted,json.dumps(policy(c)),reason))
+    scope=stock_id(db,batch,d.get('location_id') or 'roastery',package)
+    delta(db,m,scope,q,extra)
+    audit(db,actor,'stock_addition',{'movement_id':m,'batch_id':batch,'stock_id':scope,'quantity_mg':q,'overfill_mg':extra,'reason':reason})
+    return {'movement_id':m,'batch_id':batch,'stock_id':scope}
+
 def movement(db,d,actor,request_id):
     kind=d['kind']; m,repeat=begin_move(db,kind,actor,d,request_id,d.get('reversal_of'))
     if repeat: return {'movement_id':m,'duplicate':True}

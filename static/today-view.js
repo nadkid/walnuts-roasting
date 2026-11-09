@@ -98,9 +98,9 @@ function beansPanel(rows,h){
 }
 
 function floorPanel(id,rows,h){
-  const {esc,kg,badge,empty,btn}=h,visible=rows.filter(r=>r[id+'_mg']>0);
+  const {esc,grams,badge,empty,btn}=h,visible=rows.filter(r=>r[id+'_mg']>0);
   return `<section class="panel floor-panel" aria-labelledby="${id}-stock-title"><div class="panel-heading"><div><span class="eyebrow">${id==='cafe'?'BEHIND THE BAR':'ON THE SHELF'}</span><h2 id="${id}-stock-title">${id==='cafe'?'Café stock':'Retail stock'}</h2></div><a href="#stock">View stock ↗</a></div>
-    ${visible.length?`<ul class="bean-stock-list">${visible.map(r=>`<li><div><b>${esc(r.name)}</b><small>${r.profiles.map(c=>esc(c.profile)).filter((p,i,a)=>a.indexOf(p)===i).join(' · ')||'No roast profile'}${id==='wall'?` · ${r.wall_bags} ${r.wall_bags===1?'bag':'bags'}${r.wall_bulk_mg?' · '+kg(r.wall_bulk_mg)+' bulk':''}`:''}</small>${r[id+'_held_mg']?badge(kg(r[id+'_held_mg'])+' held / archived','red'):''}</div><strong>${kg(r[id+'_mg'])}</strong></li>`).join('')}</ul>`:empty(id==='cafe'?'No café stock':'No retail stock','Transfer coffee here to see a breakdown by bean.')}
+    ${visible.length?`<ul class="bean-stock-list">${visible.map(r=>`<li><div><b>${esc(r.name)}</b><small>${r.profiles.map(c=>esc(c.profile)).filter((p,i,a)=>a.indexOf(p)===i).join(' · ')||'No roast profile'}${id==='wall'?` · ${r.wall_bags} ${r.wall_bags===1?'bag':'bags'}${r.wall_bulk_mg?' · '+grams(r.wall_bulk_mg)+' bulk':''}`:''}</small>${r[id+'_held_mg']?badge(grams(r[id+'_held_mg'])+' held / archived','red'):''}</div><strong>${grams(r[id+'_mg'])}</strong></li>`).join('')}</ul>`:empty(id==='cafe'?'No café stock':'No retail stock','Transfer coffee here to see a breakdown by bean.')}
     <div class="floor-panel-footer"><p>Physical stock · includes allocations, overfill and held coffee</p><div class="quick-actions">${id==='cafe'?btn('Record usage','quick-use'):btn('Record sale','quick-sale')}${btn('Count stock','quick-count',{location:id})}</div></div></section>`;
 }
 

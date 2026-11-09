@@ -69,12 +69,19 @@ class Shopify:
     def orders(self,since):
         after=None
         while True:
-            data=self.query('query($after:String,$q:String!){orders(first:20,after:$after,query:$q,sortKey:UPDATED_AT){nodes{id name createdAt closedAt updatedAt cancelledAt displayFinancialStatus displayFulfillmentStatus} pageInfo{hasNextPage endCursor}}}',{'after':after,'q':"updated_at:>='"+stamp(since)+"'"})['orders']
+            data=self.query('query($after:String,$q:String!){orders(first:20,after:$after,query:$q,sortKey:UPDATED_AT){nodes{id name createdAt closedAt updatedAt cancelledAt displayFinancialStatus displayFulfillmentStatus processedAt currencyCode taxesIncluded currentShippingPriceSet{shopMoney{amount currencyCode}}} pageInfo{hasNextPage endCursor}}}',{'after':after,'q':"updated_at:>='"+stamp(since)+"'"})['orders']
             for o in data['nodes']:
-                o['lines']=self.connection(o['id'],'lineItems','id title sku quantity currentQuantity unfulfilledQuantity variant{id}')
-                shipping=self.connection(o['id'],'shippingLines','title deliveryCategory')
+                o['lines']=self.connection(o['id'],'lineItems','id title sku quantity currentQuantity unfulfilledQuantity variant{id} priceAfterAllDiscountsBeforeTaxesSet{shopMoney{amount currencyCode}} originalTotalSet{shopMoney{amount currencyCode}} discountAllocations{allocatedAmountSet{shopMoney{amount currencyCode}}} taxLines{priceSet{shopMoney{amount currencyCode}}}')
+                shipping=self.connection(o['id'],'shippingLines','title deliveryCategory isRemoved taxLines{priceSet{shopMoney{amount currencyCode}}}')
+                o['shippingLines']=shipping
                 o['deliveryMethod']=' / '.join(s['title']+((' · '+s['deliveryCategory']) if s.get('deliveryCategory') else '') for s in shipping) or 'Not supplied — confirm dispatch / pickup'
-                fs=self.query('query($id:ID!){order(id:$id){fulfillments(first:250){id createdAt status}}}',{'id':o['id']})['order']['fulfillments']
+                details=self.query('query($id:ID!){order(id:$id){refunds{id createdAt totalRefundedSet{shopMoney{amount currencyCode}}} fulfillments(first:250){id createdAt status}}}',{'id':o['id']})['order']
+                fs=details['fulfillments'];o['refunds']=details.get('refunds',[])
+                for refund in o['refunds']:
+                    refund['refundLineItems']=self.connection(refund['id'],'refundLineItems','quantity lineItem{id} subtotalSet{shopMoney{amount currencyCode}} totalTaxSet{shopMoney{amount currencyCode}}',root='refund')
+                    refund['refundShippingLines']=self.connection(refund['id'],'refundShippingLines','subtotalAmountSet{shopMoney{amount currencyCode}} taxAmountSet{shopMoney{amount currencyCode}}',root='refund')
+                    refund['transactions']=self.connection(refund['id'],'transactions','status kind',root='refund')
+                    refund['orderAdjustments']=self.connection(refund['id'],'orderAdjustments','id',root='refund')
                 if len(fs)>=250:raise SyncError('Order reached fulfillment retrieval limit. Reconcile it before advancing sync.')
                 for f in fs:
                     f['lines']=[{'line_id':i['lineItem']['id'],'quantity':i['quantity']} for i in self.connection(f['id'],'fulfillmentLineItems','quantity lineItem{id}',root='fulfillment')]
@@ -126,14 +133,14 @@ class Scheduler:
                         products.upsert(db,'shopify',item)
                 cfg=settings(db)
                 # Repair the formerly unquoted date query with a full initial-window backfill.
-                since=(cfg.get('shopify_watermark') if cfg.get('shopify_import_version')==2 else None) or stamp(dt(stamp())-timedelta(days=59))
+                since=(cfg.get('shopify_watermark') if cfg.get('shopify_import_version')==3 else None) or stamp(dt(stamp())-timedelta(days=59))
                 since=stamp(dt(since)-timedelta(minutes=10))
                 for record in api.orders(since):
                     with transaction(db):order_import(db,record)
                     count+=1
                 with transaction(db):
                     db.execute('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',('shopify_watermark',json.dumps(started)))
-                    db.execute('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',('shopify_import_version',json.dumps(2)))
+                    db.execute('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',('shopify_import_version',json.dumps(3)))
                     db.execute('UPDATE webhook_deliveries SET processed_at=? WHERE processed_at IS NULL AND received_at<=?',(stamp(),started))
                     products.seed_shopify(db)
             message=result['message'] if source=='square' else (f'{count} records checked; {ignored} before import start; {review} need review') if source=='roastworld' else f'{count} records reconciled'

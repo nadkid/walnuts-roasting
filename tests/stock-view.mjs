@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import {hasStock,compareStockAge,selectStocks,stockActions} from '../static/stock-view.js';
+const ready={brew:{eligible:true},dispatch:{eligible:true},retail:{eligible:true}};
+const scope=(id,extra={})=>({id,code:id,coffee_id:'c',quantity_mg:100000,overfill_mg:0,free_mg:100000,reserved_mg:0,location_id:'roastery',package_id:'bulk',roasted_at:'2026-11-01T01:00:00Z',readiness:ready,...extra});
+const stocks=[scope('empty',{quantity_mg:0,free_mg:0}),scope('reserved',{free_mg:0,reserved_mg:100000}),scope('packed',{package_id:'p',location_id:'wall'}),scope('old',{roasted_at:'2026-10-01T01:00:00Z'}),scope('unknown',{roasted_at:null}),scope('overfill',{quantity_mg:0,overfill_mg:1000,free_mg:0})];
+const before=JSON.stringify(stocks);
+assert.equal(hasStock(stocks[0]),false);assert.equal(hasStock(stocks[1]),true);assert.equal(hasStock(stocks[5]),true);
+assert.equal(selectStocks(stocks).length,5);
+assert.equal(selectStocks(stocks,{balance:'all'}).length,6);
+assert.equal(selectStocks(stocks)[0].id,'old');assert.equal(selectStocks(stocks).at(-1).id,'unknown');
+assert.deepEqual(selectStocks(stocks,{form:'bags',location:'wall'}).map(s=>s.id),['packed']);
+assert.deepEqual(selectStocks(stocks,{reservation:'reserved'}).map(s=>s.id),['reserved']);
+assert(!selectStocks(stocks,{reservation:'free'}).some(s=>s.id==='reserved'));
+assert.equal(selectStocks(stocks,{date:'2026-11-01'}).length,3);
+assert.equal(selectStocks(stocks,{coffee:'absent'}).length,0);
+assert.equal(JSON.stringify(stocks),before);
+assert.deepEqual(stockActions(stocks[0]).map(a=>a[0]),['count']);
+assert.deepEqual(stockActions(stocks[1]).map(a=>a[0]),['count']);
+const bulk=stockActions(stocks[3]).map(a=>a[0]);assert(bulk.includes('pack')&&bulk.includes('consume')&&!bulk.includes('sale')&&!bulk.includes('unpack'));
+const packed=stockActions(stocks[2]).map(a=>a[0]);assert(packed.includes('sale')&&packed.includes('unpack')&&!packed.includes('pack')&&!packed.includes('consume'));
+const held=stockActions(scope('held',{held:1,readiness:{brew:{eligible:false},dispatch:{eligible:false},retail:{eligible:false}}}),{},true).map(a=>a[0]);
+assert(held.includes('return')&&!held.includes('reserve')&&!held.includes('consume'));
+assert(stockActions(stocks[0],{history_only:1}).some(a=>a[0]==='opening'));
+assert(!stockActions(stocks[0],{history_only:1,stock_only:true}).some(a=>a[0]==='opening'));
+// A complete pack hides the source balance while retaining the bag row. Recounts
+// or reversals naturally make the same source row reappear without a deletion.
+const transfer=[scope('source'),scope('destination',{quantity_mg:0,free_mg:0,package_id:'p'})];
+transfer[0].quantity_mg=0;transfer[0].free_mg=0;transfer[1].quantity_mg=100000;transfer[1].free_mg=100000;
+assert.deepEqual(selectStocks(transfer).map(s=>s.id),['destination']);
+transfer[0].quantity_mg=1000;transfer[0].free_mg=1000;
+assert.equal(selectStocks(transfer).length,2);
+console.log('Stock view: empty/overfill/reserved balances, combined filters, unknown dates, pack/recount visibility and appropriate actions passed.');

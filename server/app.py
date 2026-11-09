@@ -11,7 +11,7 @@ from .planner import plan
 from .wholesale import save_order,dispatch_order
 from .auth import password_hash,login,token_hash
 from .adapters import Scheduler
-from . import green,products,square
+from . import green,products,square,profit
 
 LIMIT=2*1024*1024
 
@@ -21,10 +21,16 @@ def state(db,user,scheduler):
         s=stock(db,r['id']);s['free_mg']=s['quantity_mg']-s['reserved_mg'];s['readiness']={u:dict(zip(('eligible','ready_at','label'),eligibility(s,u,clock))) for u in ('brew','dispatch','retail')};stocks.append(s)
     batches=rows(db,'SELECT b.*,c.name coffee,c.profile FROM batches b LEFT JOIN coffees c ON c.id=b.coffee_id ORDER BY roasted_at DESC')
     for b in batches:
+        b['stock_only']=bool(b['history_only'] and not b['green_mg'] and not b['output_mg'])
         b['remaining_mg']=sum(s['quantity_mg']+s['overfill_mg'] for s in stocks if s['batch_id']==b['id']);b['readiness']={u:dict(zip(('eligible','ready_at','label'),eligibility(b,u,clock))) for u in ('brew','dispatch','retail')}
         b.pop('source_json',None)
     orders=rows(db,'SELECT * FROM orders ORDER BY due_at,number')
+    shipping_records=profit.shipping_snapshot(db)
+    order_currencies={r['order_id']:r['currency'] for r in rows(db,'SELECT order_id,currency FROM order_financials')}
     for o in orders:
+        o['shipping']=shipping_records.get(o['id'])
+        o['currency']=order_currencies.get(o['id'],'JPY')
+        o['can_record_shipping']=profit.shipping_eligible(db,o)
         o['wholesale']=one(db,'SELECT * FROM wholesale_orders WHERE order_id=?',(o['id'],)) if o['source']=='wholesale' else None
         if o['wholesale']:o['wholesale']['customer']=json.loads(o['wholesale'].pop('customer_json'))
         o['lines']=rows(db,'SELECT l.*,v.kind,v.coffee_id,v.package_id,p.weight_mg FROM lines l LEFT JOIN variants v ON v.id=l.variant_id LEFT JOIN packages p ON p.id=v.package_id WHERE l.order_id=?',(o['id'],))
@@ -86,13 +92,14 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith('/api/'):
                 user=self.session(db)
                 if not user:return self.send(401,{'error':'Please sign in.'})
+                if path=='/api/profit':return self.send(200,profit.snapshot(db))
                 if path=='/api/state':return self.send(200,state(db,user,self.server.scheduler))
                 if path=='/api/history':
                     query=parse_qs(urlsplit(self.path).query);batch=query.get('batch',[''])[0]
                     return self.send(200,{'movements':rows(db,'SELECT m.*,e.delta_mg,e.delta_overfill_mg,s.location_id,s.package_id FROM entries e JOIN movements m ON m.id=e.movement_id JOIN stocks s ON s.id=e.stock_id WHERE s.batch_id=? ORDER BY m.at DESC,m.rowid DESC',(batch,)),'audit':rows(db,'SELECT * FROM audit ORDER BY id DESC LIMIT 200')})
                 if path=='/api/export':
                     if user['role']!='admin':return self.send(403,{'error':'Administrator access required.'})
-                    return self.send(200,{'exported_at':stamp(),'sale_products':rows(db,'SELECT * FROM sale_products'),'sale_catalog':rows(db,'SELECT * FROM sale_catalog'),'square_sales':rows(db,'SELECT * FROM square_sales'),'square_sale_picks':rows(db,'SELECT * FROM square_sale_picks'),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
+                    return self.send(200,{'exported_at':stamp(),'order_financials':rows(db,'SELECT * FROM order_financials'),'order_shipping':rows(db,'SELECT * FROM order_shipping'),'fulfillment_picks':rows(db,'SELECT * FROM fulfillment_picks'),'square_return_orders':rows(db,'SELECT * FROM square_return_orders'),'sale_products':rows(db,'SELECT * FROM sale_products'),'sale_catalog':rows(db,'SELECT * FROM sale_catalog'),'square_sales':rows(db,'SELECT * FROM square_sales'),'square_sale_picks':rows(db,'SELECT * FROM square_sale_picks'),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
                 return self.send(404,{'error':'Unknown endpoint.'})
             relative='index.html' if path=='/' else path.lstrip('/')
             f=(ROOT/'static'/relative).resolve()
@@ -175,11 +182,13 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/square-config':return square.configure(db,d,actor)
         if path=='/api/square-retry':square.retry_sales(db);return
         if path=='/api/square-acknowledge':return square.acknowledge(db,d,actor)
+        if path=='/api/order-shipping':return profit.save_shipping(db,d,actor,request)
         if path=='/api/green-bean':return green.save_bean(db,d,actor,request)
         if path=='/api/green-purchase':return green.receive(db,d,actor,request)
         if path=='/api/green-count':return green.count(db,d,actor,request)
         if path=='/api/green-reverse':return green.reverse(db,d,actor,request)
         if path=='/api/batch':return create_batch(db,d,actor,request)
+        if path=='/api/roasted-stock':return add_roasted_stock(db,d,actor,request)
         if path=='/api/move':return movement(db,d,actor,request)
         if path=='/api/link-plan':return link_completed_plan(db,d,actor,request)
         if path=='/api/wholesale':return save_order(db,d,actor,request)
@@ -240,6 +249,11 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/batch-policy':
             b=one(db,'SELECT * FROM batches WHERE id=?',(d['id'],))
             if not d.get('reason'):raise ValueError('A policy or quality decision requires a reason.')
+            if 'roasted_at' in d:
+                if not (b['history_only'] and not b['green_mg'] and not b['output_mg']):raise ValueError('Only stock-only batches can have their roast date reviewed here.')
+                roasted=stamp(d['roasted_at'])
+                if dt(roasted)>dt(now(db)):raise ValueError('The roast date cannot be in the future.')
+                db.execute('UPDATE batches SET roasted_at=? WHERE id=?',(roasted,b['id']))
             if 'held' in d:db.execute('UPDATE batches SET held=?,hold_reason=? WHERE id=?',(int(d['held']),d['reason'],b['id']))
             if 'archived' in d:db.execute('UPDATE batches SET archived=? WHERE id=?',(int(d['archived']),b['id']))
             if d.get('recalculate'):

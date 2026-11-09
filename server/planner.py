@@ -82,7 +82,7 @@ def plan(db,horizon=14):
             # Suggested future supply is spent once; its rounding excess can cover subsequent demand.
             if deadline and excess>0:
                 supply.append({'coffee_id':coffee['id'],'roasted_at':deadline,'policy':json.dumps({k:coffee[k] for k in ('brew_days','dispatch_days','retail_days','fresh_days')}),'held':0,'archived':0,'left':excess,'code':'Suggestion carryover','id':'suggestion','planned':True})
-                supply.sort(key=lambda s:s['roasted_at'])
+                supply.sort(key=lambda s:s['roasted_at'] or '')
         result.append({**d,'coffee':coffee['name'],'profile':coffee['profile'],'covered_mg':covered,'shortage_mg':need,'allocations':allocations,'yield_bp':yield_bp,'yield_source':yield_source,'green_mg':green,'charges_mg':charges,'roast_slots':schedule,'excess_mg':excess,'latest_roast_at':deadline,'ready_at':stamp(dt(deadline)+timedelta(days=rest)) if deadline else None,'warnings':warning})
     return {'rows':result,'issues':problems,'horizon_days':horizon,'generated_at':now(db)}
 

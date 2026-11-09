@@ -75,6 +75,42 @@ class SquareSales(unittest.TestCase):
         for id,extra in [('fraction',{'qty':'1.5'}),('elsewhere',{'location_id':'other'}),('pickup',{'fulfillments':[{'type':'PICKUP'}]})]:
             self.ingest(self.order(id,**extra));self.assertEqual(self.status(id),'pending')
         self.assertEqual(self.wall_mg(),400000)
+    def test_completed_in_store_fulfillment_deducts_once(self):
+        self.wall();r=self.order(qty='1',fulfillments=[{'type':'IN_STORE','state':'COMPLETED'}])
+        self.ingest(r);self.ingest(r)
+        self.assertEqual(self.status(),'posted');self.assertEqual(self.wall_mg(),300000)
+        self.assertEqual(len(rows(self.db,'SELECT * FROM square_sale_picks')),1)
+    def test_incomplete_unknown_and_remote_fulfillments_still_need_review(self):
+        self.wall()
+        cases=[{'type':'IN_STORE','state':s} for s in (None,'PROPOSED','RESERVED','PREPARED','CANCELED','FAILED')]
+        cases += [{'type':t,'state':'COMPLETED'} for t in ('PICKUP','SHIPMENT','DELIVERY','DIGITAL','UNKNOWN',None)]
+        cases += [[{'type':'IN_STORE','state':'COMPLETED'},{'type':'PICKUP','state':'COMPLETED'}]]
+        for n,case in enumerate(cases):
+            with self.subTest(fulfillment=case):
+                id='fulfillment-'+str(n)
+                self.ingest(self.order(id,qty='1',fulfillments=case if isinstance(case,list) else [case]))
+                self.assertEqual(self.status(id),'pending');self.assertEqual(self.wall_mg(),400000)
+    def test_legacy_fulfillment_flag_requires_reimport_before_deduction(self):
+        self.wall();r=self.order(qty='1',fulfillments=[{'type':'IN_STORE','state':'COMPLETED'}])
+        with transaction(self.db):square.import_order(self.db,r)
+        legacy=json.loads(one(self.db,'SELECT payload FROM square_sales')['payload']);legacy.pop('fulfillments')
+        self.db.execute('UPDATE square_sales SET payload=?',(json.dumps(legacy),))
+        with transaction(self.db):square.retry_sales(self.db)
+        self.assertEqual(self.status(),'pending');self.assertEqual(self.wall_mg(),400000)
+        self.ingest(r);self.ingest(r)
+        self.assertEqual(self.status(),'posted');self.assertEqual(self.wall_mg(),300000)
+    def test_completed_in_store_sale_respects_start_and_does_not_backfill_earlier_sales(self):
+        self.wall();self.op(square.configure,{'location_id':'shop','start_at':'2026-11-11T00:00:00Z','enabled':True})
+        r=self.order(qty='1',fulfillments=[{'type':'IN_STORE','state':'COMPLETED'}])
+        self.ingest(r)
+        self.ingest(self.order('earlier',qty='1',closed_at='2026-11-09T23:59:59Z',fulfillments=[{'type':'IN_STORE','state':'COMPLETED'}]))
+        self.assertEqual(self.status(),'before_start');self.assertEqual(self.wall_mg(),400000)
+        self.op(square.configure,{'location_id':'shop','start_at':'2026-11-10T00:00:00Z','enabled':True})
+        self.ingest(r)
+        self.assertEqual(self.status(),'posted');self.assertEqual(self.status('earlier'),'before_start');self.assertEqual(self.wall_mg(),300000)
+    def test_completed_in_store_return_is_not_automatically_deducted(self):
+        self.wall();self.ingest(self.order(fulfillments=[{'type':'IN_STORE','state':'COMPLETED'}],returns=[{'uid':'return'}]))
+        self.assertEqual(self.status(),'pending');self.assertEqual(self.wall_mg(),400000)
     def test_product_weight_change_blocks_deduction_until_review(self):
         self.wall();products.upsert(self.db,'square',{'id':'sq-100','name':'Renamed coffee','variation':'150g'});self.ingest(self.order());self.assertEqual(self.status(),'pending')
         with self.assertRaises(ValueError):self.map('sq-100')
@@ -89,7 +125,7 @@ class SquareSales(unittest.TestCase):
         items=products.snapshot(self.db)['catalog'];a=next(i for i in items if i['external_id']=='new');b=next(i for i in items if i['external_id']=='different')
         self.assertTrue(a['suggestions']);self.assertEqual(a['kind'],'unresolved');self.assertEqual(b['suggestions'],[])
     def test_customer_and_payment_details_are_not_stored(self):
-        self.ingest(self.order(customer_id='SECRET-CUSTOMER',tenders=[{'card_details':'SECRET-CARD'}],customer={'email':'SECRET-EMAIL'}))
+        self.ingest(self.order(customer_id='SECRET-CUSTOMER',tenders=[{'card_details':'SECRET-CARD'}],customer={'email':'SECRET-EMAIL'},fulfillments=[{'type':'IN_STORE','state':'COMPLETED','recipient':{'email':'SECRET-RECIPIENT'},'pickup_details':{'note':'SECRET-NOTE'}}]))
         self.assertNotIn('SECRET',one(self.db,'SELECT payload FROM square_sales')['payload'])
     def test_square_sale_cannot_be_generically_reversed(self):
         self.wall();self.ingest(self.order());m=one(self.db,"SELECT id FROM movements WHERE kind='square_sale'")

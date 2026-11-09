@@ -58,9 +58,18 @@ def normalized(order):
     # Retain only inventory and money fields. No customer, card or address payloads.
     ls=[]
     for l in order.get('line_items',[]):
-        ls.append({k:l[k] for k in ('uid','catalog_object_id','name','variation_name','quantity','quantity_unit','base_price_money','total_money','total_tax_money','total_discount_money') if k in l})
+        ls.append({k:l[k] for k in ('uid','catalog_object_id','name','variation_name','quantity','quantity_unit','base_price_money','total_money','total_tax_money','total_discount_money','total_service_charge_money') if k in l})
         ls[-1]['modifiers']=[{'name':m.get('name','')} for m in l.get('modifiers',[])]
-    return {k:order[k] for k in ('id','location_id','version','state','created_at','updated_at','closed_at','net_amounts') if k in order}|{'line_items':ls,'has_returns':bool(order.get('returns') or order.get('refunds')),'has_fulfillment':bool(order.get('fulfillments'))}
+    returns=[{'source_order_id':r.get('source_order_id'),'return_line_items':[{k:l[k] for k in ('source_line_item_uid','quantity','total_money','total_tax_money','total_service_charge_money') if k in l} for l in r.get('return_line_items',[])]} for r in order.get('returns',[])]
+    refunds=[{k:r[k] for k in ('id','status','amount_money') if k in r} for r in order.get('refunds',[])]
+    return {k:order[k] for k in ('id','location_id','version','state','created_at','updated_at','closed_at','net_amounts') if k in order}|{'line_items':ls,'returns':returns,'refunds':refunds,'has_returns':bool(order.get('returns') or order.get('refunds')),'has_fulfillment':bool(order.get('fulfillments')),'fulfillments':[{k:f.get(k) for k in ('type','state')} for f in order.get('fulfillments',[])]}
+
+def fulfillment_needs_review(order):
+    fulfillments=order.get('fulfillments',[])
+    # Legacy payloads retained only a boolean. Re-import those receipts before
+    # classifying them; never guess their fulfillment type from that flag.
+    if not fulfillments:return bool(order.get('has_fulfillment'))
+    return any(f.get('type')!='IN_STORE' or f.get('state')!='COMPLETED' for f in fulfillments)
 
 def signature(o):
     return json.dumps({'state':o['state'],'lines':sorted([(l.get('uid',''),l.get('catalog_object_id',''),l.get('quantity',''),l.get('quantity_unit'),l.get('modifiers',[])) for l in o['line_items']],key=lambda x:x[0])},sort_keys=True)
@@ -68,6 +77,8 @@ def signature(o):
 def import_order(db,order):
     r=normalized(order);id=r['id'];old=db.execute('SELECT * FROM square_sales WHERE id=?',(id,)).fetchone();version=int(r.get('version',0));updated=stamp(r['updated_at'])
     if old and (version<old['version'] or (version==old['version'] and dt(updated)<dt(old['updated_at']))):return
+    if r.get('returns') or db.execute('SELECT 1 FROM square_return_orders WHERE id=?',(id,)).fetchone():
+        db.execute('INSERT INTO square_return_orders VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,updated_at=excluded.updated_at,payload=excluded.payload WHERE excluded.version>=square_return_orders.version AND excluded.updated_at>=square_return_orders.updated_at',(id,version,updated,json.dumps({'returns':r['returns'],'state':r['state']})))
     completed=stamp(r.get('closed_at') or r.get('created_at') or r['updated_at'])
     if not old and r['state']!='COMPLETED':return
     if settings(db).get('square_category_id') and not any(in_category(db,l) for l in r['line_items']) and not (old and old['movement_id']):
@@ -106,7 +117,7 @@ def post_sale(db,id):
     if o['location_id']!=cfg['square_location_id']:return pending(db,id,'Receipt is from a different Square location.')
     if r['state']!='COMPLETED' or not r.get('closed_at'):return pending(db,id,'Receipt is not a completed sale with a closing timestamp.')
     if dt(o['completed_at'])>dt(now(db)):return pending(db,id,'Receipt is dated in the future.')
-    if r['has_returns'] or r['has_fulfillment']:return pending(db,id,'Return, exchange or fulfillment order needs review before retail-wall deduction.')
+    if r['has_returns'] or fulfillment_needs_review(r):return pending(db,id,'Return, exchange, pickup/delivery or incomplete fulfillment needs review before retail-wall deduction.')
     picks=[];available={};seen=set()
     for l in r['line_items']:
         lid=l.get('uid','');vid=l.get('catalog_object_id')
@@ -197,7 +208,8 @@ def sync(scheduler,db,started):
     cfg=settings(db);location=cfg['square_location_id']
     if not location:return {'records':sum(category in v.get('category_ids',[]) for v in catalog),'message':f'{sum(category in v.get('category_ids',[]) for v in catalog)} Beans variations imported. Select your shop location in Product mappings.'}
     if not db.execute('SELECT 1 FROM square_locations WHERE id=? AND active=1',(location,)).fetchone():raise SyncError('Selected Square location is unavailable. Review location setup.')
-    since=cfg.get('square_watermark') or cfg['square_start_at'] or stamp(dt(started)-timedelta(days=7))
+    since=(cfg.get('square_watermark') or cfg['square_start_at']) if cfg.get('square_profit_import_version')==1 else stamp(dt(started)-timedelta(days=59))
+    since=since or stamp(dt(started)-timedelta(days=7))
     since=stamp(dt(since)-timedelta(minutes=10));count=0
     for r in api.orders(location,since):
         with transaction(db):import_order(db,r)
@@ -205,4 +217,6 @@ def sync(scheduler,db,started):
     with transaction(db):
         retry_sales(db)
         db.execute('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',('square_watermark',json.dumps(started)))
-    return {'records':count,'message':f'{sum(category in v.get('category_ids',[]) for v in catalog)} Beans variations; {count} receipts checked. '+('Automatic FIFO deductions enabled.' if cfg['square_enabled'] else 'Preview only — no stock deducted.')}
+        db.execute('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',('square_profit_import_version',json.dumps(1)))
+    processing=('Automatic FIFO deductions scheduled from '+cfg['square_start_at']+'.') if cfg['square_enabled'] and cfg['square_start_at'] and dt(cfg['square_start_at'])>dt(now(db)) else 'Automatic FIFO deductions enabled.' if cfg['square_enabled'] else 'Preview only — no stock deducted.'
+    return {'records':count,'message':f'{sum(category in v.get('category_ids',[]) for v in catalog)} Beans variations; {count} receipts checked. '+processing}

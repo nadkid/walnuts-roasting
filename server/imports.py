@@ -80,6 +80,8 @@ def order_import(db,o,actor='Shopify'):
         db.execute('INSERT OR IGNORE INTO fulfillment_events VALUES (?,?,?,?,0)',(f['id'],id,stamp(f['createdAt']),json.dumps(f)))
         event=one(db,'SELECT * FROM fulfillment_events WHERE id=?',(f['id'],))
         if not event['recorded']: issue(db,'shopify',f['id'],'external_fulfillment','Shopify confirms fulfillment. Record the actual batch pick; inventory has not been guessed or deducted.')
+    from .profit import import_shopify
+    import_shopify(db,o)
     return {'order_id':id}
 
 def fulfillment_pick(db,d,actor,request_id):
@@ -101,7 +103,9 @@ def fulfillment_pick(db,d,actor,request_id):
         eligible,_,why=eligibility(s,'dispatch',now(db))
         if not eligible: raise ValueError('Pick is ineligible: '+why+'. Use an audited policy override if appropriate.')
         # Remaining-order reservations cannot be consumed for an already fulfilled quantity.
-        delta(db,m,s['id'],-q);allocated[line]=allocated.get(line,0)+q
+        extra=-delta(db,m,s['id'],-q)
+        db.execute('INSERT INTO fulfillment_picks(fulfillment_id,line_id,stock_id,movement_id,quantity_mg,overfill_mg) VALUES (?,?,?,?,?,?)',(f['id'],line,s['id'],m,q,extra))
+        allocated[line]=allocated.get(line,0)+q
     if {k:v['mg'] for k,v in required.items()}!=allocated: raise ValueError('Picks must exactly cover all coffee quantities in this fulfillment.')
     db.execute('UPDATE fulfillment_events SET recorded=1 WHERE id=?',(f['id'],));db.execute("UPDATE issues SET resolved=1 WHERE source='shopify' AND external_id=? AND kind='external_fulfillment'",(f['id'],));audit(db,actor,'fulfillment_pick',d)
     return {'movement_id':m}

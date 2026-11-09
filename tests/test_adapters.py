@@ -76,7 +76,7 @@ class Adapters(unittest.TestCase):
                 from server.domain import dt,stamp
                 from server.db import settings
                 self.assertGreater((dt(stamp())-dt(client.return_value.orders.call_args.args[0])).days,50)
-                self.assertEqual(settings(case.db)['shopify_import_version'],2)
+                self.assertEqual(settings(case.db)['shopify_import_version'],3)
         finally:case.tearDown()
 
     def test_roast_import_start_skips_old_invalid_logs_and_clears_only_their_reviews(self):

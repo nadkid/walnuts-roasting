@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {productsPage} from '../static/products-view.js';
+const S={clock:'2026-11-08T05:00:00Z',settings:{square_enabled:true,square_start_at:'2026-11-09T01:00:00Z',square_location_id:'shop'},products:{products:[],catalog:[]},square:{locations:[{id:'shop',name:'Fixture'}],sales:[],pending_count:0},sync:{square:{configured:true}}};
+const h={heading:()=>'',btn:s=>s,badge:s=>s,esc:s=>String(s??''),date:s=>s,options:()=>'',empty:s=>s,admin:()=>true};
+let html=productsPage(S,h);
+assert(html.includes('Deductions scheduled'));
+assert(html.includes('Automatic deductions have not started yet.'));
+assert(!html.includes('Automatic deductions on'));
+S.settings.square_start_at='2026-11-08T04:59:59Z';html=productsPage(S,h);
+assert(html.includes('Automatic deductions on'));
+assert(!html.includes('Automatic deductions have not started yet.'));
+S.settings.square_enabled=false;html=productsPage(S,h);
+assert(html.includes('Preview mode'));
+assert(!html.includes('Deductions scheduled'));
+console.log('Square products view: scheduled, active and preview processing states passed.');

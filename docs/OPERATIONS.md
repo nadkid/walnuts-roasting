@@ -6,7 +6,7 @@ Keep RoasTime controlling the Bullet. Walnuts Roastery does not send roast-contr
 
 Configure coffee/profile policies, packages, locations and external bean/variant mappings first. Set the intended cutover timestamp in Settings → Connections. Before cutover, imported roasts become batch history with a zero-balance stock scope. A missing cutover makes all imported roasts history-only. No unknown yield is used to invent stock.
 
-Count the actual remaining coffee by batch. Open its Stock row → Historical opening count, record the net weight and a reason. For already packaged coffee, establish the total measured opening bulk equivalent, then use packing and transfers to represent its present form and location. Explain that these are onboarding classifications in the movement reasons. Do not also record the same bags as an additional positive count. The combined opening scopes must reconcile to the actual physical total.
+Count the actual remaining coffee by batch. Choose Roasted stock → Balances → Show empty too, then open its row → Historical opening count, record the net weight and a reason. For already packaged coffee, establish the total measured opening bulk equivalent, then use packing and transfers to represent its present form and location. Explain that these are onboarding classifications in the movement reasons. Do not also record the same bags as an additional positive count. The combined opening scopes must reconcile to the actual physical total.
 
 New valid post-cutover source roasts create measured production once. Repeating a source import cannot create it again. Moving the cutover later does not rewrite previously posted stock. Correct any onboarding mistake with a reviewed adjustment/reversal.
 
@@ -14,9 +14,13 @@ If a bean is roasted into multiple different profiles, do not give it an indiscr
 
 ## Daily work
 
-**Today** shows production conflicts, resting batches, floor stock and connection status. Unconnected or stale sources stay visible; manual work continues during provider failures.
+**Today** shows the nearest order deadlines, production priorities, bean-level green/rested/ready-to-ship balances, and café/retail stock. Connections and exceptions are managed in Settings.
 
 **Record a roast:** enter the actual time, green input and measured roasted output. Only output becomes stock. The batch snapshots the coffee’s policy. A future roast belongs in the plan. Complete an approved plan from its queue so actual output replaces its expected supply once. For an already imported production batch, open its detail and use “Link completed plan” with a match-confirmation reason; this replaces expected supply without posting production again.
+
+**Roasted stock:** empty physical balances are hidden by default, including bulk that has all been packed. Fully reserved coffee stays visible. Use Balances → Show empty too to find a depleted scope for recounting; history is never deleted. Count stock uses the current page filters.
+
+**Add roasted stock:** use this for already-roasted coffee missed from inventory. Choose an existing batch (including depleted batches) or New / unrecorded batch, enter the additional bulk weight or whole bags and optional measured overfill, choose the physical location, and give a reason. This does not record production, deduct green beans, alter measured roast yields or complete a plan. Use the actual original roast date if known. For unknown dates, the coffee stays unavailable under rest policies until an administrator opens its batch details → Set roast date and records the reviewed date and reason. Existing quality holds remain in place. For a recount of stock already represented, use Count and enter the actual total instead of adding that total again.
 
 **Transfer:** choose a source batch/location/form and a destination. Filling a hopper or moving beans to café storage does not consume coffee. Give individual hoppers/containers their own location names if you will count them separately. Open packaged bags with “Open bags into bulk”; it transfers the actual contents, including recorded overfill, to the selected bulk scope.
 
@@ -170,3 +174,57 @@ screen and never consume bean stock. Mixed receipts retain and deduct only the
 Bean-category lines in the dashboard. Existing unrelated previews are archived as
 outside scope without deleting history or reversing physical stock. If the category
 cannot be resolved, syncing stops visibly rather than including the whole catalogue.
+
+### Square in-store receipts and scheduled starts
+
+Completed Square sales with no fulfillment record, or only completed `IN_STORE`
+fulfillments, deduct approved Bean items from eligible retail-wall stock. Pickup,
+delivery, shipping, unknown or incomplete fulfillments and returns remain for
+review. Only fulfillment type/state is retained; recipient details are discarded.
+Older receipts with only a generic fulfillment flag need a fresh import before
+classification. Repeat imports preserve the existing once-only deduction.
+
+An enabled Square connection with a future deduction start is shown as scheduled.
+Earlier receipts are imported as “before start” and leave stock unchanged. Choose
+the exact operational cutover when sales begin counting, avoiding any interval
+already covered by manual entries or physical counts.
+
+## Profit reporting and shipping
+
+Open **Profit** for completed Square bean receipts and fulfilled, paid Shopify
+orders. Select dates (inclusive JST), day/week/month groups, channel, bean/profile,
+package, currency and cost coverage; search or sort the detail and export the
+filtered lines as CSV. Refunds restate the original sale date. Shopify processing
+and Square completion timestamps determine dates. Initial financial imports refresh
+the accessible recent 59-day window; older records without prices remain missing.
+
+On **Orders**, dispatched/fulfilled orders expose **Add shipping details**. Record
+one or more parcels with carrier, service, tracking, dispatch date, optional weight,
+and actual cost **excluding tax**, in the order currency. Choose pickup for an
+explicit zero cost. Edits require a note, check the record version and retain audit
+history. Saving shipping never adjusts inventory or writes back to Shopify.
+
+Bean COGS uses moving weighted-average green inventory cost at the roast date,
+measured roast yield and actual picked weight (including overfill). Unknown opening
+valuations, count gains, unpriced receipts and missing batch picks remain unknown.
+Counts reducing green stock preserve average price. Purchase corrections replay
+costs; historical profit can change. Historical fulfillment picks are not guessed.
+Customer shipping income and carrier costs are allocated by discounted item value
+before refunds, including the non-coffee share; only the bean share is reported.
+All amounts are integer currency minor units; allocation preserves totals.
+
+Packaging, payment fees, labor and overhead are intentionally excluded from this
+first version. They can be added as distinct cost categories later. Packing waste,
+manual stock losses, local wholesale sales, café drinks and manual retail stock
+movements are not represented as sale profits. Missing values display a dash,
+never zero; complete-line profit is shown separately when totals are incomplete.
+Refunds do not restore physical coffee or automatically reverse its cost. Ambiguous,
+amount-only or unconfirmed refunds require review and block the profit figure.
+
+Migration 011 adds only reporting/shipping tables and immutable fulfillment pick
+references. Export includes those records. Existing Square deduction cutoffs and
+idempotency protections remain active during the financial backfill.
+
+### Estimated COGS for historical sales
+
+Where full batch costing is unavailable, Profit uses the latest non-reversed priced green receipt linked to the coffee profile. Without batch picks it divides that green cost by the configured roast yield and applies it to sold bag weight. With recorded picks but missing valuation it uses the actual batch yield and includes overfill. These values are labelled Estimated COGS, identified in details and CSV, and can be selected using the cost coverage filter. Estimates can revise with newly entered green prices. Recorded batch costing remains preferred. Known COGS subtotals are shown even when other sale lines still need mapping or price information. Missing currencies or unapproved product mappings are never guessed. This is reporting only and creates no stock movements.

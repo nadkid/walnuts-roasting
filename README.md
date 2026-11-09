@@ -55,6 +55,7 @@ python3 -m unittest discover -s tests -v
 node --check static/app.js  # optional syntax check; Node is not a runtime requirement
 node tests/order-view.mjs
 node tests/today-view.mjs
+node tests/stock-view.mjs
 ```
 
 The HTTP tests open a temporary loopback port. All tests use disposable databases. See [TEST-REPORT.md](docs/TEST-REPORT.md) for actual verification and limits.
@@ -64,6 +65,14 @@ The HTTP tests open a temporary loopback port. All tests use disposable database
 Today starts with orders for the earliest outstanding dispatch/pickup day in Tokyo time, including overdue orders. Cancelled, archived, fully fulfilled orders and wholesale drafts are excluded; orders without a deadline are flagged for review. Fulfillment and production states are shown separately. Production priorities show the first three requirements by roast deadline, with the full queue under Roast plan.
 
 The bean overview combines roast profiles linked to the same green bean without duplicating its green balance. Green stock below **5 kg** is highlighted red; unlinked profiles show an unknown green balance. **Rested** means physical roasted stock meeting its batch's café policy. **Ready to ship** means packaged net weight meeting the dispatch policy, including allocated bags. These columns can overlap; both exclude quality holds, archived batches and out-of-policy stock. Café and retail panels show physical quantities per bean, including overfill, with held/archived quantities labelled. Connections and reconciliation remain in Settings.
+
+## Roasted stock and found coffee
+
+Roasted stock shows only balances with physical coffee on hand by default. Fully packed, transferred, sold or consumed stock disappears from that view while its batch and movement history remain intact. Fully reserved stock stays visible. Choose **Balances → Show empty too** to recount an empty scope; positive counts or reversals bring it back automatically. Filters and **Count stock** apply to the same visible scopes.
+
+Use **Add roasted stock** for previously unrecorded coffee. Add it to an existing batch or create a stock-only batch, choose its location and bulk weight or whole-bag quantity, and record a reason. This creates an audited stock adjustment, never a roast or green-bean deduction, and does not change measured roasting yields or complete a roast plan. Enter the original roast date if known. Unknown dates stay unavailable for use/allocation until an administrator reviews the date in batch details. Existing batch policies and holds remain in force.
+
+For a recount of coffee already recorded, use **Count stock** and enter the actual total remaining, rather than adding that total a second time. Counts can increase or decrease stock without affecting green beans; stale counts and reductions below reserved amounts are rejected.
 
 ## Deploy, connect and maintain
 
