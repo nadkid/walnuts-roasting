@@ -313,3 +313,7 @@ rewriting the immutable green ledger. Legacy single-bean events retain their bat
 reference. Blend component events use the separate batch_green_components
 references, allowing multiple component deductions per roast. Export includes all
 new recipe and component records. No recipe is activated automatically on deploy.
+
+### Customer-order stock coverage
+
+Customer orders draw coverage only from the **Roastery** stock location, in both Today and Roast plan. Café, retail wall, packing and other locations are excluded, including their existing reservations. To use that coffee for an order, record its actual transfer back to Roastery and review any old reservation. Orders flags outside allocations for review and offers Roastery stock for new allocations. Packed order allocations default to Roastery; physical shipment reconciliation continues to record the actual stock picked. Café and retail stock counts and their forecasts remain independent.

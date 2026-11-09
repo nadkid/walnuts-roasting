@@ -2,7 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 import json, math
 from .db import rows, one, settings
-from .domain import dt, stamp, now, JST, eligibility, stock, order_eligible
+from .domain import dt, stamp, now, JST, eligibility, stock, order_eligible, at_roastery
 
 def plan(db,horizon=14):
     cfg=settings(db);clock=dt(now(db));end=clock+timedelta(days=horizon);demands=[];problems=[]
@@ -31,9 +31,12 @@ def plan(db,horizon=14):
                     retained.append(held);take=min(need,held['qty']);need-=take;covered+=take
                     if take:allocations.append({'batch':held['stock']['code'],'grams':take/1000,'kind':'target carryover'})
             retail_holds[d['coffee_id']]=retained
-        # An owned reservation covers only its own requirement and only if ready by the deadline.
+        outside_order_allocation=False
+        # Customer orders can use only physical stock at the roastery.
         for r in rows(db,'SELECT * FROM reservations WHERE '+d['type']+'=?',(d['id'],)):
             s=stock(db,r['stock_id'])
+            if d['channel']=='dispatch' and not at_roastery(s):
+                outside_order_allocation=True;continue
             if eligibility(s,d['channel'],d['due_at'])[0]:
                 take=min(need,r['quantity_mg'])
                 if d['channel']=='dispatch':take=(take//d['unit_mg'])*d['unit_mg']
@@ -41,6 +44,7 @@ def plan(db,horizon=14):
                 if d['channel']=='retail' and take:retail_holds[d['coffee_id']].append({'stock':s,'qty':take})
         for s in supply:
             if need<=0:break
+            if d['channel']=='dispatch' and not s.get('planned') and not at_roastery(s):continue
             if s['coffee_id']!=d['coffee_id'] or not eligibility(s,d['channel'],d['due_at'])[0]:continue
             if s.get('package_id','bulk')!='bulk' and d['channel']=='brew':continue # opening still required; do not imply ready bulk
             if d['channel']=='dispatch' and s.get('package_id','bulk')!='bulk':
@@ -56,6 +60,7 @@ def plan(db,horizon=14):
         rest=coffee[d['channel']+'_days'];deadline=None;warning=[];charges=[];green=0;excess=0
         history=one(db,'SELECT COALESCE(SUM(output_mg),0) o,COALESCE(SUM(green_mg),0) g FROM batches WHERE coffee_id=? AND output_mg>0 AND green_mg>output_mg',(coffee['id'],))
         yield_bp=history['o']*10000//history['g'] if history['g'] else coffee['yield_bp'];yield_source='measured history' if history['g'] else 'configured estimate'
+        if outside_order_allocation:warning.append('Order allocation outside the roastery; review its reservation.')
         if rest is None: warning.append('Configure '+d['channel']+' rest policy')
         else:
             deadline=dt(d['due_at'])-timedelta(days=rest+cfg['buffer_days']);local=deadline.astimezone(JST)

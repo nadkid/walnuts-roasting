@@ -39,14 +39,15 @@ def state(db,user,scheduler):
         if o['wholesale']:o['wholesale']['customer']=json.loads(o['wholesale'].pop('customer_json'))
         o['lines']=rows(db,'SELECT l.*,v.kind,v.coffee_id,v.package_id,p.weight_mg FROM lines l LEFT JOIN variants v ON v.id=l.variant_id LEFT JOIN packages p ON p.id=v.package_id WHERE l.order_id=?',(o['id'],))
         for l in o['lines']:
-            l['allocations']=rows(db,'SELECT r.*,b.code,s.package_id FROM reservations r JOIN stocks s ON s.id=r.stock_id JOIN batches b ON b.id=s.batch_id WHERE line_id=?',(l['id'],))
-            l['required_mg']=l['unfulfilled']*(l['weight_mg'] or 0);l['allocated_mg']=sum(a['quantity_mg'] for a in l['allocations']);l['missing_mg']=max(0,l['required_mg']-l['allocated_mg'])
+            l['allocations']=rows(db,'SELECT r.*,b.code,s.package_id,s.location_id,loc.name location FROM reservations r JOIN stocks s ON s.id=r.stock_id JOIN batches b ON b.id=s.batch_id JOIN locations loc ON loc.id=s.location_id WHERE line_id=?',(l['id'],))
+            l['required_mg']=l['unfulfilled']*(l['weight_mg'] or 0);l['excluded_allocation_mg']=sum(a['quantity_mg'] for a in l['allocations'] if not at_roastery(a));l['allocated_mg']=sum(a['quantity_mg'] for a in l['allocations'] if at_roastery(a));l['missing_mg']=max(0,l['required_mg']-l['allocated_mg'])
             if l['kind']=='noncoffee':status='Non-coffee'
             elif o['cancelled']:status='Cancelled'
             elif l['kind']!='coffee':status='Needs mapping'
             elif not order_eligible(db,o['id']):status='Wholesale draft' if o['source']=='wholesale' else 'Awaiting payment'
             elif not l['unfulfilled']:status='Shopify fulfilled / removed'
             elif not o['due_at']:status='Needs deadline'
+            elif l['excluded_allocation_mg']:status='Allocation outside roastery'
             elif any(not eligibility(stock(db,a['stock_id']),'dispatch',o['due_at'])[0] for a in l['allocations']):status='Allocation at risk'
             elif any(a['quantity_mg']%l['weight_mg'] for a in l['allocations']):status='Review split-bag allocations'
             elif l['missing_mg']:status='Needs allocation / roasting'

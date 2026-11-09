@@ -40,6 +40,9 @@ def eligibility(batch,use,at):
 
 def stock(db,id):
     return one(db,"SELECT s.*,b.coffee_id,b.code,b.roasted_at,b.policy,b.held,b.archived,c.name coffee,c.profile,l.name location,COALESCE(p.name,'Bulk') form,COALESCE(p.weight_mg,0) package_mg,COALESCE((SELECT SUM(quantity_mg) FROM reservations r WHERE r.stock_id=s.id),0) reserved_mg FROM stocks s JOIN batches b ON b.id=s.batch_id LEFT JOIN coffees c ON c.id=b.coffee_id JOIN locations l ON l.id=s.location_id LEFT JOIN packages p ON p.id=s.package_id WHERE s.id=?",(id,))
+def at_roastery(scope):
+    return scope.get('location_id')=='roastery'
+
 def stock_id(db,batch,location,package='bulk'):
     one(db,'SELECT * FROM locations WHERE id=?',(location,))
     if package!='bulk': one(db,'SELECT * FROM packages WHERE id=?',(package,))
@@ -193,6 +196,7 @@ def movement(db,d,actor,request_id):
         due=stamp(d['due_at']); line=d.get('line_id') or None; demand=d.get('demand_id') or None
         if bool(line)==bool(demand): raise ValueError('Choose exactly one order line or café/retail requirement.')
         if line:
+            if not at_roastery(s):raise ValueError('Customer orders can only reserve stock at the roastery.')
             l=one(db,'SELECT l.*,v.coffee_id,v.package_id,v.kind,o.payment,o.cancelled,o.due_at FROM lines l JOIN orders o ON o.id=l.order_id LEFT JOIN variants v ON v.id=l.variant_id WHERE l.id=?',(line,))
             if l['kind']!='coffee' or l['coffee_id']!=s['coffee_id'] or not order_eligible(db,l['order_id']): raise ValueError('Order is unmapped, ineligible, or for another coffee.')
             if d.get('use','dispatch')!='dispatch' or not l['due_at'] or stamp(l['due_at'])!=due: raise ValueError('Order allocations must use its exact local dispatch deadline and dispatch policy.')
@@ -219,7 +223,7 @@ def movement(db,d,actor,request_id):
         p=one(db,'SELECT * FROM packages WHERE id=?',(v['package_id'],));q=r['quantity_mg']
         if q%p['weight_mg']: raise ValueError('Allocation must cover whole bags; replace this allocation first.')
         db.execute('DELETE FROM reservations WHERE id=?',(r['id'],));delta(db,m,s['id'],-q)
-        dest=stock_id(db,s['batch_id'],d.get('location_id','packing'),p['id']);delta(db,m,dest,q)
+        dest=stock_id(db,s['batch_id'],d.get('location_id','roastery'),p['id']);delta(db,m,dest,q)
         db.execute('INSERT INTO reservations VALUES (?,?,?,?,?,?,?,?)',(r['id'],dest,r['line_id'],None,q,r['use'],r['due_at'],r['created_at']))
     elif kind=='shipment':
         event=one(db,'SELECT * FROM fulfillment_events WHERE id=?',(d['fulfillment_id'],))

@@ -91,11 +91,11 @@ class CustomerRoast(unittest.TestCase):
         self.assertEqual(self.tile()['status'],'Roast overdue')
         self.db.execute('UPDATE coffees SET dispatch_days=NULL');self.assertEqual(self.tile()['tone'],'yellow');self.assertIsNone(self.tile()['roast_by'])
 
-    def test_bulk_is_net_weight_not_a_whole_bag_per_stock_scope(self):
+    def test_bulk_is_net_weight_with_other_locations_excluded(self):
         b=self.core.batch(output=850);s=stock_id(self.db,b,'roastery')
         self.core.move(s,'transfer',grams=425,location_id='cafe')
         self.order(units=9)
-        self.assertEqual(self.tile()['roast_mg'],50000,'two 425g scopes contribute all 850g, rather than rounding each down to 400g')
+        self.assertEqual(self.tile()['roast_mg'],475000,'only the 425g remaining at the roastery counts; bulk is not rounded down to bags')
         self.plan(expected=50000)
         self.assertEqual(self.tile()['scheduled_mg'],50000)
     def test_blend_stays_one_finished_coffee_with_estimated_components(self):

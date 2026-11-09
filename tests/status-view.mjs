@@ -16,7 +16,7 @@ assert.equal(tone({due_at:past,lines:[{...line,unfulfilled:0}]}),'green');
 assert.equal(tone({due_at:past,cancelled:1}),'yellow','cancelled orders are not active overdue commitments');
 assert.equal(tone({due_at:past,closed_at:clock}),'yellow','archived but incomplete orders need review');
 assert.equal(tone({due_at:past,wholesale:{status:'DRAFT'}}),'yellow');
-for(const status of ['Needs mapping','Needs deadline','Allocation at risk','Review split-bag allocations','Awaiting payment'])assert.equal(tone({lines:[{...line,status}]}),'yellow',status);
+for(const status of ['Needs mapping','Needs deadline','Allocation at risk','Allocation outside roastery','Review split-bag allocations','Awaiting payment'])assert.equal(tone({lines:[{...line,status}]}),'yellow',status);
 for(const status of ['Resting','Ready to pack','Packed / allocated'])assert.equal(tone({lines:[{...line,status}]}),'green',status+' can still be on time');
 assert.equal(tone({lines:[{...line,status:'Needs allocation / roasting'}]}),'yellow');
 const covered={id:'l1',type:'line_id',due_at:future,shortage_mg:0,warnings:[],allocations:[{kind:'planned',batch:'Plan p10000'}]};

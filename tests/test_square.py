@@ -49,7 +49,9 @@ class SquareSales(unittest.TestCase):
         with transaction(self.db):square.retry_sales(self.db)
         self.assertEqual(self.wall_mg(),200000)
     def test_reservations_quality_holds_and_immature_stock_are_protected(self):
-        old=self.wall(5);new=self.wall(6);self.c.order();self.c.move(old,'reserve',grams=300,line_id='l',use='dispatch',due_at='2026-11-25T03:00:00Z')
+        old=self.wall(5);new=self.wall(6);self.c.order()
+        # Legacy floor allocations still protect stock until explicitly reviewed.
+        self.db.execute("INSERT INTO reservations VALUES ('legacy-floor',?,'l',NULL,300000,'dispatch','2026-11-25T03:00:00Z','2026-11-20T03:00:00Z')",(old,))
         self.ingest(self.order());self.assertEqual(one(self.db,'SELECT quantity_mg FROM stocks WHERE id=?',(old,))['quantity_mg'],300000)
         self.db.execute('UPDATE batches SET held=1 WHERE id=(SELECT batch_id FROM stocks WHERE id=?)',(new,));self.ingest(self.order('sale2',qty='3'));self.assertEqual(self.status('sale2'),'pending')
         self.wall(19);self.ingest(self.order('immature',qty='5'));self.assertEqual(self.status('immature'),'pending')

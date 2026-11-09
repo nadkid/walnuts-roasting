@@ -19,7 +19,7 @@ const S={clock,orders,planner:{rows:[]},coffees:[{id:'filter',name:'Kiri',profil
 const before=JSON.stringify(S),beans=beanOverview(S),kiri=beans.find(b=>b.id==='kiri');
 assert.equal(kiri.green_mg,4999000,'shared green stock is counted once');
 assert.equal(kiri.rested_mg,1754000,'rested includes physical overfill and allocated stock, excludes ineligible stock');
-assert.equal(kiri.ship_mg,400000,'ready to ship is eligible packed net weight, including allocations');
+assert.equal(kiri.ship_mg,0,'ready to ship excludes floor stock and ineligible roastery stock');
 assert.equal(kiri.cafe_mg,300000);
 assert.equal(kiri.wall_mg,654000);
 assert.equal(kiri.wall_held_mg,200000);
@@ -57,3 +57,8 @@ assert.ok(beanOverview(deleted).some(r=>r.name==='Exhausted green bean'),'new gr
 const shared=structuredClone(S);shared.coffees.find(c=>c.id==='espresso').archived=1;
 assert.deepEqual(beanOverview(shared).find(b=>b.id==='kiri').profiles.map(c=>c.id),['filter']);
 console.log('Deleted coffees are hidden on Today; shared beans and returning green stock stay visible.');
+
+const roasteryPacked=structuredClone(S);
+roasteryPacked.stocks.push(stock('filter',200000,{location_id:'roastery',package_mg:100000,overfill_mg:2000,free_mg:0}));
+assert.equal(beanOverview(roasteryPacked).find(b=>b.id==='kiri').ship_mg,200000,'ready-to-ship uses eligible roastery bag net weight, including reservations');
+assert.equal(beanOverview(roasteryPacked).find(b=>b.id==='kiri').wall_mg,kiri.wall_mg,'retail totals retain their physical stock');

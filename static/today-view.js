@@ -1,3 +1,4 @@
+import {isOrderStock} from './order-view.js';
 import {coffeeRoastPanel} from './coffee-roast-view.js';
 
 export function beanOverview(S){
@@ -22,7 +23,7 @@ export function beanOverview(S){
     const physical=(s.quantity_mg||0)+(s.overfill_mg||0);
     if(s.readiness.brew.eligible)r.rested_mg+=physical;
     // Packaged coffee only: eligible bulk still needs packing before dispatch.
-    if(s.package_mg>0&&s.readiness.dispatch.eligible)r.ship_mg+=s.quantity_mg;
+    if(isOrderStock(s)&&s.package_mg>0&&s.readiness.dispatch.eligible)r.ship_mg+=s.quantity_mg;
     if(s.location_id==='cafe'||s.location_id==='wall'){
       const prefix=s.location_id;
       r[prefix+'_mg']+=physical;
@@ -39,7 +40,7 @@ export function beanOverview(S){
 function beansPanel(rows,h){
   const {esc,kg,badge,empty}=h;
   return `<section class="panel bean-overview" aria-labelledby="beans-title"><div class="panel-heading"><div><span class="eyebrow">FROM GREEN TO DISPATCH</span><h2 id="beans-title">Bean overview</h2><p>One balance per bean, across its roast profiles and locations.</p></div><a href="#green">Manage green beans ↗</a></div>
-    ${rows.length?`<div class="table-wrap"><table><thead><tr><th scope="col">Bean / roast profiles</th><th scope="col">Green stock<small>Alert below 5 kg</small></th><th scope="col">Rested<small>Meets café rest policy</small></th><th scope="col">Ready to ship<small>Packed · dispatch eligible</small></th></tr></thead><tbody>${rows.map(r=>`<tr><th scope="row"><b>${esc(r.name)}</b><small>${r.profiles.map(c=>esc(c.name)+' · '+esc(c.profile)).join('<br>')||esc(r.origin)||'No linked roast profiles'}</small></th><td data-label="Green stock" class="${r.green_mg!==null&&r.green_mg<5000000?'low-stock':''}">${r.is_blend?'<b>Blend recipe</b><small>Green stock tracked by ingredient</small>':r.green_mg===null?'<span class="unknown-stock">—</span><small>Green bean not linked</small>':`<b>${kg(r.green_mg)}</b>${r.green_mg<5000000?badge(r.green_mg<0?'Check stock balance':'Low stock','red'):''}`}</td><td data-label="Rested"><b>${kg(r.rested_mg)}</b></td><td data-label="Ready to ship"><b>${kg(r.ship_mg)}</b></td></tr>`).join('')}</tbody></table></div><div class="dashboard-note">Rested and ready-to-ship quantities may overlap and include allocated stock. Ready to ship uses bag net weight; held, archived and out-of-policy coffee is excluded from both.</div>`:empty('No beans yet','Add green beans and link roast profiles to see your stock here.')}</section>`;
+    ${rows.length?`<div class="table-wrap"><table><thead><tr><th scope="col">Bean / roast profiles</th><th scope="col">Green stock<small>Alert below 5 kg</small></th><th scope="col">Rested<small>Meets café rest policy</small></th><th scope="col">Ready to ship<small>Packed · at roastery</small></th></tr></thead><tbody>${rows.map(r=>`<tr><th scope="row"><b>${esc(r.name)}</b><small>${r.profiles.map(c=>esc(c.name)+' · '+esc(c.profile)).join('<br>')||esc(r.origin)||'No linked roast profiles'}</small></th><td data-label="Green stock" class="${r.green_mg!==null&&r.green_mg<5000000?'low-stock':''}">${r.is_blend?'<b>Blend recipe</b><small>Green stock tracked by ingredient</small>':r.green_mg===null?'<span class="unknown-stock">—</span><small>Green bean not linked</small>':`<b>${kg(r.green_mg)}</b>${r.green_mg<5000000?badge(r.green_mg<0?'Check stock balance':'Low stock','red'):''}`}</td><td data-label="Rested"><b>${kg(r.rested_mg)}</b></td><td data-label="Ready to ship"><b>${kg(r.ship_mg)}</b></td></tr>`).join('')}</tbody></table></div><div class="dashboard-note">Rested and ready-to-ship quantities may overlap and include allocated stock. Ready to ship uses roastery bag net weight; held, archived and out-of-policy coffee is excluded from both.</div>`:empty('No beans yet','Add green beans and link roast profiles to see your stock here.')}</section>`;
 }
 
 function floorPanel(id,rows,h){

@@ -15,3 +15,10 @@ assert.equal(selectOrders(orders,{production:'Needs mapping',search:'1256'})[0].
 assert.equal(selectOrders(orders,{payment:'PAID',search:'absent'}).length,0);
 assert.equal(selectOrders(orders,{}).length,orders.length);assert.equal(orders[0].number,'#1256');
 console.log('Order view: chronological/timezone sorting, combined status filters, empty results and non-mutating selection passed.');
+
+const {orderAllocationStocks}=await import('../static/order-view.js');
+const scope={coffee_id:'c',free_mg:100000,package_id:'bulk',location_id:'roastery',roasted_at:'2026-11-01T00:00:00Z'};
+const stocks=[{...scope,id:'roastery-bulk'},{...scope,id:'roastery-packed',package_id:'p',roasted_at:'2026-11-02T00:00:00Z'},...['cafe','wall','packing'].map(location_id=>({...scope,id:location_id,location_id})),{...scope,id:'other-coffee',coffee_id:'other'},{...scope,id:'reserved',free_mg:0},{...scope,id:'wrong-size',package_id:'other-size'}];
+assert.deepEqual(orderAllocationStocks(stocks,{coffee_id:'c',package_id:'p'}).map(s=>s.id),['roastery-bulk','roastery-packed']);
+assert.equal(stocks.length,8,'choosing order stock does not mutate inventory');
+console.log('Customer allocations offer only compatible free roastery stock.');

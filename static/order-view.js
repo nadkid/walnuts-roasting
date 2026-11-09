@@ -1,3 +1,6 @@
+import {compareStockAge} from './stock-view.js';
+export const isOrderStock=s=>s.location_id==='roastery';
+export function orderAllocationStocks(stocks,line){return stocks.filter(s=>isOrderStock(s)&&s.coffee_id===line.coffee_id&&s.free_mg>0&&['bulk',line.package_id].includes(s.package_id)).sort(compareStockAge)}
 export function orderStatus(o){return o.cancelled?'cancelled':o.closed_at?'archived':'open'}
 export function selectOrders(orders,f={}){
  const needle=(f.search||'').trim().toLowerCase();

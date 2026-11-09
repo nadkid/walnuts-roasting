@@ -2,7 +2,7 @@
 from collections import defaultdict
 from datetime import timedelta
 from .db import rows, settings
-from .domain import dt, stamp, now, stock, eligibility, order_eligible
+from .domain import dt, stamp, now, stock, eligibility, order_eligible, at_roastery
 from .planner import latest_slot
 from . import coffees, blends
 
@@ -26,11 +26,11 @@ def customer_roast(db):
                         'required_mg':line['unfulfilled']*line['weight_mg'],
                         'stock_mg':0,'scheduled_mg':0,'roast_mg':None,'roast_by':None,'notes':[]})
     demands.sort(key=lambda d:(dt(d['due_at']) if d['due_at'] else dt('9999-01-01T00:00:00Z'),d['number'],d['id']))
-    supply={r['id']:stock(db,r['id']) for r in rows(db,'SELECT id FROM stocks WHERE quantity_mg>0')}
+    supply={r['id']:stock(db,r['id']) for r in rows(db,"SELECT id FROM stocks WHERE quantity_mg>0 AND location_id='roastery'")}
     for s in supply.values():s['left']=max(0,s['quantity_mg']-s['reserved_mg'])
     available=sorted(supply.values(),key=lambda s:(s['roasted_at'] or '',s['id']))
     reservations=defaultdict(list)
-    for r in rows(db,'SELECT * FROM reservations WHERE line_id IS NOT NULL'):reservations[r['line_id']].append(r)
+    for r in rows(db,'SELECT r.*,s.location_id FROM reservations r JOIN stocks s ON s.id=r.stock_id WHERE r.line_id IS NOT NULL'):reservations[r['line_id']].append(r)
     plans=rows(db,"SELECT * FROM plans WHERE status='planned' ORDER BY roast_at,id")
     for p in plans:p.update(left=p['expected_mg'],roasted_at=p['roast_at'],held=0,archived=0)
 
@@ -44,6 +44,8 @@ def customer_roast(db):
             d['notes'].append('Add an order deadline to calculate roasting needs.');continue
         need=d['required_mg']
         for r in reservations[d['id']]:
+            if not at_roastery(r):
+                d['notes'].append('An order allocation is outside the roastery. Review it before reallocating.');continue
             s=supply.get(r['stock_id'])
             if not s or not suitable(s,d):
                 d['notes'].append('Review an allocation that is not suitable for this deadline.');continue

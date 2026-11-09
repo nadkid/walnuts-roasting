@@ -12,7 +12,7 @@ class Wholesale(unittest.TestCase):
   return {'customer':{'business':'Fictional Café','contact':'Demo buyer','email':'buyer@example.invalid','address':'Example address'},'status':'CONFIRMED','payment':'PENDING','terms':'Net 14','due_at':'2026-11-25T03:00:00Z','method':'delivery','lines':[{'coffee_id':'c','unit_g':'100','quantity':'4','grind':'Whole bean'}],**overrides}
  def create(self,**overrides):return self.c.runop(save_order,self.payload(**overrides),'staff','create')['order_id']
  def setup_stock(self):
-  id=self.create();batch=self.c.batch();bulk=stock_id(self.db,batch,'roastery');self.c.move(bulk,'pack',package_id='p',units='4',location_id='packing');packed=stock_id(self.db,batch,'packing','p');line=one(self.db,'SELECT * FROM lines WHERE order_id=?',(id,));self.c.move(packed,'reserve',grams=400,line_id=line['id'],use='dispatch',due_at='2026-11-25T03:00:00Z');return id,packed,line
+  id=self.create();batch=self.c.batch();bulk=stock_id(self.db,batch,'roastery');self.c.move(bulk,'pack',package_id='p',units='4',location_id='roastery');packed=stock_id(self.db,batch,'roastery','p');line=one(self.db,'SELECT * FROM lines WHERE order_id=?',(id,));self.c.move(packed,'reserve',grams=400,line_id=line['id'],use='dispatch',due_at='2026-11-25T03:00:00Z');return id,packed,line
  def test_create_pending_invoice_plans_without_inventing_stock(self):
   id=self.create();self.assertTrue(order_eligible(self.db,id));self.assertEqual(self.c.total(),0);self.assertEqual(plan(self.db)['rows'][0]['quantity_mg'],400000);self.assertEqual(one(self.db,'SELECT * FROM wholesale_orders')['terms'],'Net 14')
  def test_repeated_submit_creates_one_order_and_custom_size(self):
