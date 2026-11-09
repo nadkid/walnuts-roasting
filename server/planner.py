@@ -11,7 +11,7 @@ def plan(db,horizon=14):
         if l['kind']!='coffee':problems.append(l['number']+': variant mapping required');continue
         if not l['due_at']:problems.append(l['number']+': target dispatch / pickup date required');continue
         demands.append({'id':l['id'],'coffee_id':l['coffee_id'],'channel':'dispatch','due_at':l['due_at'],'quantity_mg':l['unfulfilled']*l['weight_mg'],'label':l['number'],'type':'line_id','unit_mg':l['weight_mg']})
-    for d in rows(db,'SELECT * FROM demands'):
+    for d in rows(db,'SELECT d.* FROM demands d WHERE NOT EXISTS(SELECT 1 FROM coffee_archives a WHERE a.coffee_id=d.coffee_id)'):
         demands.append({**d,'label':d['note'] or ('Café forecast' if d['channel']=='brew' else 'Retail target'),'type':'demand_id'})
     order=cfg['channel_priority'];demands.sort(key=lambda d:(d['due_at'],order.index(d['channel'])))
     supply=[]
@@ -84,6 +84,13 @@ def plan(db,horizon=14):
                 supply.append({'coffee_id':coffee['id'],'roasted_at':deadline,'policy':json.dumps({k:coffee[k] for k in ('brew_days','dispatch_days','retail_days','fresh_days')}),'held':0,'archived':0,'left':excess,'code':'Suggestion carryover','id':'suggestion','planned':True})
                 supply.sort(key=lambda s:s['roasted_at'] or '')
         result.append({**d,'coffee':coffee['name'],'profile':coffee['profile'],'covered_mg':covered,'shortage_mg':need,'allocations':allocations,'yield_bp':yield_bp,'yield_source':yield_source,'green_mg':green,'charges_mg':charges,'roast_slots':schedule,'excess_mg':excess,'latest_roast_at':deadline,'ready_at':stamp(dt(deadline)+timedelta(days=rest)) if deadline else None,'warnings':warning})
+    from . import blends
+    for r in result:
+        if blends.profile(db,r['coffee_id']) and r['green_mg']>0:
+            try:
+                blend=blends.charge(db,r['coffee_id'],r['latest_roast_at'] or now(db),r['green_mg'],check_stock=False)
+                r['blend_components']=blend['ingredients']
+            except ValueError as e:r['warnings'].append(str(e))
     return {'rows':result,'issues':problems,'horizon_days':horizon,'generated_at':now(db)}
 
 def latest_slot(limit,cfg,used):

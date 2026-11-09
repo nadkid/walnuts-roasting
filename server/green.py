@@ -19,7 +19,9 @@ def money(value,currency):
 
 def snapshot(db):
     beans=rows(db,'SELECT * FROM green_beans ORDER BY name,id')
-    events=rows(db,'SELECT e.*,b.code batch_code FROM green_events e LEFT JOIN batches b ON b.id=e.batch_id ORDER BY effective_at,CASE WHEN e.kind=\'count\' THEN 1 ELSE 0 END,e.id')
+    from . import blends
+    blend_plans=blends.planned_components(db)
+    events=rows(db,'SELECT e.*,b.code batch_code FROM green_events e LEFT JOIN batch_green_components bc ON bc.event_id=e.id OR bc.event_id=e.reversal_of LEFT JOIN batches b ON b.id=COALESCE(e.batch_id,bc.batch_id) ORDER BY effective_at,CASE WHEN e.kind=\'count\' THEN 1 ELSE 0 END,e.id')
     for b in beans:
         es=[e for e in events if e['bean_id']==b['id']];q=0
         for e in es:q=e['count_mg'] if e['kind']=='count' else q+e['delta_mg']
@@ -28,8 +30,9 @@ def snapshot(db):
         paid=next((e for e in reversed(es) if e['kind']=='purchase' and e['total_minor'] is not None and not any(x['reversal_of']==e['id'] for x in es)),None)
         b['last_price_per_kg']=float(Decimal(paid['total_minor'])*1000000/paid['delta_mg']/(10**CURRENCIES[b['currency']])) if paid else None
         b['planned_mg']=db.execute("SELECT COALESCE(SUM(p.green_mg),0) FROM plans p JOIN green_coffee_links l ON l.coffee_id=p.coffee_id WHERE l.bean_id=? AND p.status='planned'",(b['id'],)).fetchone()[0]
+        b['planned_mg']+=blend_plans.get(b['id'],0)
         b['after_plans_mg']=q-b['planned_mg']
-    unlinked=rows(db,"SELECT b.id,b.code,b.coffee_id,b.green_mg,b.roasted_at,c.name coffee,c.profile FROM batches b JOIN coffees c ON c.id=b.coffee_id WHERE b.history_only=0 AND NOT EXISTS(SELECT 1 FROM green_events e WHERE e.batch_id=b.id) AND NOT EXISTS(SELECT 1 FROM movements m JOIN movements orig ON m.reversal_of=orig.id WHERE orig.kind='production' AND EXISTS(SELECT 1 FROM entries e JOIN stocks s ON s.id=e.stock_id WHERE e.movement_id=orig.id AND s.batch_id=b.id)) ORDER BY b.roasted_at")
+    unlinked=rows(db,"SELECT b.id,b.code,b.coffee_id,b.green_mg,b.roasted_at,c.name coffee,c.profile FROM batches b JOIN coffees c ON c.id=b.coffee_id WHERE b.history_only=0 AND NOT EXISTS(SELECT 1 FROM green_events e WHERE e.batch_id=b.id) AND NOT EXISTS(SELECT 1 FROM batch_green_components bc WHERE bc.batch_id=b.id) AND NOT EXISTS(SELECT 1 FROM movements m JOIN movements orig ON m.reversal_of=orig.id WHERE orig.kind='production' AND EXISTS(SELECT 1 FROM entries e JOIN stocks s ON s.id=e.stock_id WHERE e.movement_id=orig.id AND s.batch_id=b.id)) ORDER BY b.roasted_at")
     return {'beans':beans,'events':list(reversed(events)),'unlinked':unlinked}
 
 def event(db,bean,kind,at,actor,movement,**kw):
@@ -39,7 +42,18 @@ def event(db,bean,kind,at,actor,movement,**kw):
 
 def record_roast(db,batch_id,movement_id,actor):
     b=one(db,'SELECT * FROM batches WHERE id=?',(batch_id,))
-    if b['history_only'] or db.execute('SELECT 1 FROM green_events WHERE batch_id=?',(batch_id,)).fetchone():return
+    if b['history_only'] or db.execute('SELECT 1 FROM green_events WHERE batch_id=?',(batch_id,)).fetchone() or db.execute('SELECT 1 FROM batch_green_components WHERE batch_id=?',(batch_id,)).fetchone():return
+    blend=db.execute('SELECT ingredients FROM batch_blends WHERE batch_id=?',(batch_id,)).fetchone()
+    if blend:
+        if db.execute('SELECT 1 FROM movements WHERE reversal_of=?',(movement_id,)).fetchone():return
+        import json
+        for i in json.loads(blend['ingredients']):
+            event(db,i['bean_id'],'roast',b['roasted_at'],actor,movement_id,delta_mg=-i['quantity_mg'],reason='Blend component · '+b['code'])
+            eid=db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute('INSERT INTO batch_green_components VALUES (?,?,?,?)',(batch_id,i['bean_id'],i['quantity_mg'],eid))
+        return
+    # Historical unassigned batches must never inherit a newly activated recipe.
+    if db.execute('SELECT 1 FROM blend_profiles WHERE coffee_id=?',(b['coffee_id'],)).fetchone():return
     link=db.execute('SELECT bean_id FROM green_coffee_links WHERE coffee_id=?',(b['coffee_id'],)).fetchone()
     if not link:return
     # A production correction must not be reintroduced by a later mapping/retry.
@@ -52,6 +66,7 @@ def reconcile(db,actor):
         record_roast(db,b['id'],m['id'],actor)
 
 def save_bean(db,d,actor,request_id):
+    from . import blends
     m,repeat=begin_move(db,'green_bean',actor,d,request_id)
     if repeat:return {'duplicate':True}
     id=d.get('id') or uid();name=str(d.get('name','')).strip();currency=d.get('currency','JPY')
@@ -65,6 +80,7 @@ def save_bean(db,d,actor,request_id):
     if not isinstance(coffee_ids,list) or len(coffee_ids)!=len(set(coffee_ids)):raise ValueError('Choose distinct coffee profiles.')
     for c in coffee_ids:
         one(db,'SELECT id FROM coffees WHERE id=?',(c,))
+        if blends.profile(db,c):raise ValueError('A blend draws from its saved recipe. Do not link it to one green bean.')
         link=db.execute('SELECT bean_id FROM green_coffee_links WHERE coffee_id=?',(c,)).fetchone()
         if link and link['bean_id']!=id:raise ValueError('A selected profile is already linked to another green bean. Edit that bean first.')
     db.execute('INSERT INTO green_beans(id,name,origin,variety,process,notes,currency) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,origin=excluded.origin,variety=excluded.variety,process=excluded.process,notes=excluded.notes,currency=excluded.currency,version=green_beans.version+1',(id,name,*(str(d.get(k,''))[:2000] for k in ('origin','variety','process','notes')),currency))

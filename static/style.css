@@ -29,3 +29,132 @@
 @media(max-width:1200px){.profit-stats{gap:12px}.profit-stat{padding:18px}.profit-stat>strong{font-size:27px}.profit-filter-more{grid-template-columns:repeat(3,minmax(0,1fr))}.profit-filter-main{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.profit-stats{grid-template-columns:1fr 1fr}.profit-filters{padding:16px}.profit-filter-main,.profit-filter-more{grid-template-columns:1fr 1fr}.profit-filter-more>label:last-child{grid-column:1/-1}.profit-filter-footer{align-items:flex-start}.profit-stat{padding:16px;gap:12px}.profit-stat>strong{font-size:27px}.profit-legend{margin-top:10px}.order-shipping{align-items:flex-start;flex-direction:column}.shipping-fields{grid-template-columns:1fr}.profit-chart-scroll{padding-right:0}.profit-method{padding:18px}.profit-sort{min-width:125px}}
 @media print{.profit-filters,.profit-pagination,.profit-table .actions{display:none}.profit-chart-scroll{overflow:visible}.profit-chart{max-width:100%;height:auto}.profit-stats{break-inside:avoid}.profit-scope{display:block}}
+
+/* Imported roast records awaiting reviewed details. */
+.roast-needs-info{background:#fff2ed}.roast-needs-info td:first-child{border-left:3px solid var(--red)}.roast-needs-info td>small{color:#8d4436;overflow-wrap:anywhere}.roast-needs-info .badge{margin-top:6px}.roast-needs-info td{vertical-align:top}
+
+.danger-text{color:var(--red)}.deleted-coffees{padding:20px 24px}.deleted-coffees summary{font-size:13px;font-weight:600;cursor:pointer}.deleted-coffees>p{font-size:11px;color:var(--muted);margin:14px 0 0}.deleted-coffees .list-row{padding-left:0;padding-right:0}
+
+/* Espresso recipe workspace */
+.espresso-card{border:1px solid #cbd8c6;border-radius:12px;background:linear-gradient(130deg,#edf3e7,#f9fbf5);padding:28px;margin-bottom:28px}.espresso-heading,.espresso-preview-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}.espresso-card h2{font-family:Georgia,serif;font-size:32px;font-weight:400;letter-spacing:-.7px;margin:8px 0 12px}.espresso-eyebrow{font-size:9px;letter-spacing:.18em;font-weight:650;color:#5f7556}.espresso-card p{font-size:12px;color:#64735e;margin:0 0 14px}.espresso-card-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.espresso-route{display:flex;align-items:center;gap:12px;background:#fff9;border:1px solid #d7e2cf;border-radius:6px;padding:12px 15px;font-size:11px;color:#61715a;margin:6px 0 22px}.espresso-route .badge{color:#335632;background:#e0ead7}.espresso-preview-head h3{font-size:15px;margin-top:4px}.espresso-preview-head label,.recipe-editor-toolbar label{display:grid;gap:6px;font-size:10px;color:#5f7058}.espresso-preview-head input{width:155px;padding:10px;background:#fff;border:1px solid #cad5c2;border-radius:5px;color:var(--ink)}.blend-composition svg{width:100%;height:14px;border-radius:6px;overflow:hidden;margin:8px 0 14px;display:block}.blend-color-0{fill:#405d40;background:#405d40}.blend-color-1{fill:#99af76;background:#99af76}.blend-color-2{fill:#d4b978;background:#d4b978}.blend-color-3{fill:#829c91;background:#829c91}.blend-color-4{fill:#a18d7e;background:#a18d7e}.blend-color-5{fill:#c4cca6;background:#c4cca6}.blend-ingredient{display:grid;grid-template-columns:10px minmax(0,1fr) 70px 110px;gap:15px;align-items:center;padding:16px 0;border-bottom:1px solid #dbe4d3}.blend-dot{width:9px;height:9px;border-radius:50%}.blend-ingredient b{font-size:12px;font-weight:550}.blend-ingredient small{display:block;color:#6e7b65;font-size:10px;margin-top:5px}.blend-percent{text-align:right;font-size:12px;color:#66765e}.blend-ingredient strong{font-family:Georgia,serif;font-size:23px;font-weight:400;text-align:right}.blend-short small{color:var(--red)}.espresso-footnote{font-size:10px;line-height:1.7;color:#69775e;margin-top:15px}.espresso-setup{display:flex;justify-content:space-between;gap:30px;align-items:center}.espresso-setup>div:last-child{flex-shrink:0}.espresso-setup>div:last-child>small{display:block;margin-top:12px;color:#73826a;font-size:10px}.espresso-steps{display:flex;gap:22px;font-size:10px;color:#718164;margin-top:24px;flex-wrap:wrap}.espresso-empty{text-align:center;padding:24px 16px}.espresso-empty>span{font-size:28px;display:block;margin-bottom:16px}.espresso-empty p{max-width:440px;margin:auto}.espresso-scheduled{font-size:11px;margin-bottom:20px;color:#836c35}.blend-history{border-top:1px solid #d3dfca;margin-top:24px;padding-top:17px}.blend-history summary{font-size:11px;font-weight:600;cursor:pointer}.blend-history>p{margin-top:16px}.blend-history-row{display:flex;justify-content:space-between;gap:20px;border-bottom:1px solid #dbe4d3;padding:18px 0}.blend-history-row:last-child{border:0;padding-bottom:0}.blend-history-row b{font-size:12px}.blend-history-row p{font-size:11px;margin:8px 0}.blend-history-row small{font-size:10px;color:#6b785f}.recipe-editor-toolbar{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:14px 0}.recipe-editor-toolbar input{max-width:170px}.recipe-total{font-size:12px;font-weight:600;padding:10px 14px;border-radius:5px;background:#f6eee7;color:#94593a}.recipe-total.is-valid{background:#e9f0e1;color:#47633e}.recipe-editor-row{display:grid;grid-template-columns:minmax(0,1fr) 105px 95px 24px;gap:12px;align-items:center;border:1px solid #e0e5d9;border-radius:7px;padding:16px;margin:12px 0;background:#fbfcf8}.recipe-editor-row label{min-width:0;margin:0}.recipe-editor-row select,.recipe-editor-row input{min-width:0;width:100%}.recipe-row-weight span{display:block;font-size:10px;color:#75816d;margin-bottom:8px}.recipe-row-weight b{font-size:14px;font-weight:550}.recipe-editor-row>.text-btn{padding:5px;font-size:20px}.recipe-editor-dates{margin-top:24px;border-top:1px solid var(--line);padding-top:22px}.batch-recipe{background:#f2f6eb;padding:18px;border:1px solid #d8e1ce;border-radius:6px;margin:20px 0}.batch-recipe p{font-size:11px}.batch-recipe .list-row{padding:12px 0;font-size:12px}.blend-plan-components{font-size:11px;line-height:1.7;color:#58704b;background:#edf3e7;padding:9px 12px;border-radius:5px;margin-top:9px}.blend-plan-components b{display:block;margin-bottom:4px}
+@media(max-width:800px){.espresso-setup,.espresso-heading{flex-direction:column}.espresso-card-actions{justify-content:flex-start}.espresso-card{padding:22px}.espresso-setup{align-items:flex-start}.espresso-card h2{font-size:29px}.recipe-editor-row{grid-template-columns:minmax(0,1fr) 90px 24px}.recipe-editor-row .recipe-row-weight{grid-column:1/3}.recipe-editor-row>.text-btn{grid-column:3;grid-row:1}.espresso-route{align-items:flex-start}}
+@media(max-width:500px){.espresso-card{padding:20px}.espresso-preview-head{gap:12px}.espresso-preview-head input{width:110px}.blend-ingredient{grid-template-columns:8px minmax(0,1fr) 45px 80px;gap:9px}.blend-ingredient strong{font-size:19px}.espresso-steps{gap:12px;margin-top:18px}.espresso-route{flex-direction:column;gap:8px}.recipe-editor-toolbar{align-items:flex-start;flex-direction:column;gap:4px}.recipe-editor-row{padding:12px}.blend-history-row{flex-direction:column;gap:10px}.blend-history-row .small-btn{align-self:flex-start}}
+
+/* The recipe editor needs a full-width form; ingredient rows contain their own grid. */
+dialog.blend-editor{width:980px}dialog.blend-editor .modal-body{grid-template-columns:minmax(0,1fr)}dialog.blend-editor .modal-body>*{grid-column:1/-1;min-width:0}dialog.blend-editor #add-recipe-ingredient{justify-self:start}dialog.blend-editor .recipe-editor-row select{min-height:42px}
+
+/* The same commitment colors and labels follow an order through every view. */
+.status-legend{display:flex;flex-wrap:wrap;gap:10px 22px;margin:-5px 0 24px;color:#59634f;font-size:11px}
+.status-legend span{display:inline-flex;align-items:center;gap:7px}
+.status-legend i{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.status-key-green{background:#315d42}.status-key-yellow{background:#edcb70}.status-key-red{background:#a34235}
+.commitment-header.status-green{background:#315d42;color:#fff}
+.commitment-header.status-yellow{background:#edcb70;color:#3c3018}
+.commitment-header.status-red{background:#a34235;color:#fff}
+.commitment-header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:20px 24px;border:0;min-width:0}
+.commitment-header>div{min-width:0}
+.commitment-header h2,.commitment-header h3{color:inherit;line-height:1.5;margin:0;overflow-wrap:anywhere}
+.commitment-header h3{font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.commitment-header h3>span:not(.badge){font-size:11px;font-weight:400;opacity:.9}
+.commitment-header p,.commitment-header small{color:inherit;opacity:.92;font-size:11px;line-height:1.7;margin:6px 0 0;overflow-wrap:anywhere}
+.commitment-header a{color:inherit}
+.commitment-header .badge{color:inherit;background:transparent;border:1px solid currentColor;opacity:.95}
+.commitment-header button{background:#fff;color:#34492f;border:1px solid #fff;flex-shrink:0}
+.commitment-header button:hover{background:#f1f4eb;color:#253a23}
+.commitment-header .actions{flex-wrap:wrap}
+.commitment-status{flex:0 1 270px;display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:4px}
+.commitment-status strong{font-size:12px;line-height:1.6}
+.commitment-status>span{font-size:10px;line-height:1.6;opacity:.9;overflow-wrap:anywhere}
+.order-card .commitment-header .commitment-status{align-items:flex-start;text-align:left;margin:7px 0 10px;max-width:none}
+.order-card .commitment-header .commitment-status>span{font-size:11px}
+.commitment-card{margin:16px;border:1px solid #e3e8da;border-radius:6px;overflow:hidden}
+.commitment-card .list-row{border-bottom:0}
+.plan-commitment .plan-row{border-bottom:0}
+.deadline-order.commitment-card,.today-priority.commitment-card{display:block;padding:0;border:1px solid #e3e8da}
+.deadline-order-body{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(170px,.85fr);gap:22px;padding:20px 24px}
+.today-priority-body{display:grid;grid-template-columns:210px minmax(0,1fr) auto;gap:24px;align-items:center;padding:20px 24px}
+.settings-section-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;margin:0 0 22px}
+.settings-section-heading h2{font-size:18px;margin:0 0 7px}
+.settings-section-heading p{font-size:12px;color:var(--muted);margin:0}
+.settings-section-heading .actions{flex-wrap:wrap}
+@media(max-width:1150px){.today-priority-body{grid-template-columns:175px minmax(0,1fr) auto;gap:16px}}
+@media(max-width:800px){
+ .commitment-header{padding:18px;flex-wrap:wrap;gap:10px}
+ .commitment-status{flex:1 1 180px;align-items:flex-start;text-align:left}
+ .deadline-order-body{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;padding:18px}
+ .today-priority-body{grid-template-columns:170px minmax(0,1fr);gap:16px;padding:18px}
+ .commitment-card{margin:12px}
+}
+@media(max-width:520px){
+ .commitment-header{display:block}
+ .commitment-header>.commitment-status{margin-top:10px}
+ .commitment-header>.actions,.commitment-header>button{margin-top:12px}
+ .deadline-order-body,.today-priority-body{grid-template-columns:minmax(0,1fr);gap:14px}
+ .status-legend{gap:9px 14px;font-size:10px}
+ .plan-commitment .plan-main{min-width:0;flex-basis:calc(100% - 58px)}
+ .settings-section-heading .actions{gap:8px}
+}
+
+/* A quiet work list: one finished coffee per tile, orders on demand. */
+.coffee-roast-panel{overflow:hidden}
+.coffee-roast-panel .panel-heading{align-items:center}
+.coffee-roast-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:22px}
+button.coffee-roast-tile{display:flex;flex-direction:column;min-width:0;padding:0;text-align:left;color:var(--ink);background:#fff;border:1px solid #dce3d6;border-radius:7px;overflow:hidden;cursor:pointer;transition:box-shadow .18s,border-color .18s,transform .18s}
+button.coffee-roast-tile:hover{transform:translateY(-2px);border-color:#809479;box-shadow:0 5px 16px #263c2610}
+button.coffee-roast-tile:focus-visible{outline:3px solid #67835b;outline-offset:3px}
+button.coffee-roast-tile.is-expanded{border-color:#334c3d;box-shadow:0 0 0 2px #334c3d}
+.coffee-roast-tile-header{display:flex;justify-content:space-between;gap:10px;min-height:84px;padding:17px 18px;width:100%}
+.coffee-roast-tile-header.status-green{background:#315d42;color:white}
+.coffee-roast-tile-header.status-yellow{background:#edcb70;color:#3c3018}
+.coffee-roast-tile-header.status-red{background:#a34235;color:white}
+.coffee-roast-name{display:block;min-width:0;font-size:14px;line-height:1.45;font-weight:600;overflow-wrap:anywhere}
+.coffee-roast-name small{display:block;font-size:10px;font-weight:400;margin-top:4px;opacity:.86}
+.coffee-roast-state{font-size:9px;font-weight:500;line-height:1.5;text-align:right;max-width:75px;flex-shrink:0;opacity:.95}
+.coffee-roast-tile-body{display:flex;flex:1;flex-direction:column;padding:18px 18px 13px;width:100%}
+.coffee-roast-weight{font-size:34px;line-height:1.15;letter-spacing:-1.3px;font-weight:500;font-variant-numeric:tabular-nums}
+.coffee-roast-weight-label{display:block;min-height:18px;margin-top:5px;font-size:10px;color:#738069;line-height:1.6}
+.coffee-roast-deadline{display:block;font-size:10px;line-height:1.6;margin:15px 0 13px;font-weight:500}
+.coffee-roast-tile-footer{display:flex;justify-content:space-between;gap:10px;padding-top:11px;margin-top:auto;border-top:1px solid #ecf0e7;font-size:10px;color:#65735d}
+.coffee-roast-chevron{display:inline-block;width:12px;text-align:center;font-size:14px;line-height:10px;margin-left:4px}
+.coffee-roast-detail{margin:0 22px 22px;padding:22px;background:#f6f8f1;border:1px solid #dae3d0;border-radius:7px;scroll-margin:18px}
+.coffee-roast-detail-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:17px}
+.coffee-roast-detail-heading .eyebrow{font-size:9px;margin-bottom:7px}
+.coffee-roast-detail-heading h3{font-size:17px;line-height:1.5;margin:0;overflow-wrap:anywhere}
+.coffee-roast-detail-heading h3 span{font-weight:400;font-size:11px;color:#718066;margin-left:7px}
+.coffee-roast-detail-heading .icon-btn{font-size:22px;flex-shrink:0;padding:0 3px;color:#748467}
+.coffee-order-row{display:flex;justify-content:space-between;gap:18px;padding:15px 0;border-top:1px solid #e1e7d9}
+.coffee-order-row>div{min-width:0}
+button.coffee-order-link{border:0;padding:0;background:none;color:#334c3d;font-size:13px;font-weight:600;text-align:left;overflow-wrap:anywhere}
+.coffee-order-link span{font-weight:400;font-size:10px;margin-left:4px}
+.coffee-order-row small{display:block;color:#718066;font-size:10px;line-height:1.7;margin-top:5px;overflow-wrap:anywhere}
+.coffee-order-quantity{text-align:right;flex-shrink:0;max-width:55%}
+.coffee-order-quantity b{font-size:12px;line-height:1.6;font-weight:550}
+.coffee-roast-estimate{border-top:1px solid #dce4d3;padding-top:16px;margin-top:5px}
+.coffee-roast-estimate>div{display:flex;justify-content:space-between;gap:15px;font-size:12px;line-height:1.6}
+.coffee-roast-estimate>div>span{color:#65735d}
+.coffee-roast-estimate b{font-weight:550}
+.coffee-roast-estimate p,.coffee-roast-clear{font-size:11px;color:#65735d;line-height:1.8;margin:8px 0 0}
+.coffee-roast-estimate .coffee-roast-mix{font-size:10px}
+.coffee-roast-notes{font-size:11px;line-height:1.8;color:#765b26;margin-top:15px}
+.coffee-roast-detail-footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-top:16px;margin-top:15px;border-top:1px solid #e1e7d9;font-size:10px;color:#7a876f}
+.coffee-roast-detail-footer a,.coffee-roast-review a,.coffee-roast-notes a{color:#334c3d;font-weight:500}
+.coffee-roast-review{padding:15px 22px;border-top:1px solid #edf0e8;font-size:11px;line-height:1.8;color:#765b26}
+@media(max-width:1100px){.coffee-roast-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:800px){.coffee-roast-grid{padding:18px;gap:13px}.coffee-roast-detail{margin:0 18px 18px;padding:18px}}
+@media(max-width:520px){
+ .coffee-roast-panel .panel-heading{align-items:flex-start}
+ .coffee-roast-grid{gap:10px;padding:13px}
+ .coffee-roast-tile-header{padding:13px 12px;min-height:105px;flex-direction:column;justify-content:space-between;gap:8px}
+ .coffee-roast-name{font-size:13px}.coffee-roast-state{font-size:9px;text-align:left;max-width:none}
+ .coffee-roast-tile-body{padding:15px 12px 11px}
+ .coffee-roast-weight{font-size:27px;letter-spacing:-1px}
+ .coffee-roast-weight-label{font-size:9px;min-height:29px}
+ .coffee-roast-deadline{font-size:9px;min-height:29px;margin:9px 0 11px}
+ .coffee-roast-tile-footer{font-size:9px;gap:5px;align-items:center}
+ .coffee-roast-tile-footer>span:last-child{font-size:0}.coffee-roast-chevron{font-size:16px}
+ .coffee-roast-detail{margin:0 13px 13px;padding:16px}
+ .coffee-roast-detail-heading h3{font-size:15px}.coffee-roast-detail-heading h3 span{display:block;margin:4px 0 0}
+ .coffee-order-quantity{max-width:50%;flex-shrink:1}.coffee-order-quantity b{font-size:11px}
+ .coffee-roast-review{padding:13px 16px}
+}
+@media(prefers-reduced-motion:reduce){button.coffee-roast-tile{transition:none}button.coffee-roast-tile:hover{transform:none}}

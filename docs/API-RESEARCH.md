@@ -65,3 +65,5 @@ For an app and store in the same Shopify organization, [client credentials grant
 `webhook_deliveries`: connection+delivery ID unique, topic, payload hash, processing state; `fulfillment_outbox`: local idempotency key, explicit line IDs/quantities, pending/sending/confirmed/reconciliation_required/failed state, external fulfillment ID, redacted errors.
 
 Read-only sync can be shipped before fulfillment writeback. All connected/last-sync counters must describe observed results; demo/sample mode must be explicitly labeled.
+
+Espresso update (9 November): live roast list records include `roastName`, including existing lowercase `espresso` roasts. No roast-level tags were present in the inspected list records. The blend route therefore supports an exact, case-insensitive roast-name match and explicit roast tags only when supplied. It does not infer a roast tag from bean tags or fetch undocumented endpoints. Primary reference remains https://api.roast.world/api-docs.

@@ -99,7 +99,7 @@ Square sales use the read-only integration described below, with an explicit man
    refreshed outside this app; a multi-merchant OAuth installation UI is deferred.
 2. `SQUARE_ENVIRONMENT=production` is the default; `sandbox` uses Square’s separate
    sandbox host and token. Restart the server after editing credentials.
-3. Open **Products & POS** and sync Square. It lists catalogue items/variations and
+3. Open **Settings → Products & POS** and sync Square. It lists catalogue items/variations and
    active shop locations. With one active location, initial setup selects it for
    preview only. Catalogue and recent receipt imports never enable deductions.
 4. Review mappings. Platform ID namespaces remain separate; approved external IDs

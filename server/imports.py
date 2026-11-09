@@ -2,6 +2,7 @@
 import json, csv, io
 from datetime import datetime, timezone
 from .db import uid, one, rows, settings
+from . import blends
 from .domain import stamp, now, dt, weight, positive, create_batch, issue, audit, stock, delta, begin_move, eligibility
 
 def roast_import(db,r,actor='Roast.World'):
@@ -18,17 +19,21 @@ def roast_import(db,r,actor='Roast.World'):
     db.execute('INSERT INTO imports VALUES (?,?,?,?) ON CONFLICT(source,external_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at',('roastworld',external,json.dumps(r),now(db)))
     if existing:
         old=json.loads(existing['source_json'] or '{}')
-        changed=any(old.get(k)!=r.get(k) for k in ('weightGreen','weightRoasted','dateTime','beanId'))
+        changed=any(old.get(k)!=r.get(k) for k in ('weightGreen','weightRoasted','dateTime','beanId','roastName','tags'))
         if changed: issue(db,'roastworld',external,'source_edit','Source weights, date or coffee changed. Review the source snapshot; posted inventory and batch policy were preserved.')
         db.execute('UPDATE batches SET source_json=?,source_updated=? WHERE id=?',(json.dumps(r),str(r.get('updatedAt','')),existing['id']))
         return {'batch_id':existing['id'],'duplicate':True}
-    mapping=db.execute('SELECT coffee_id FROM bean_mappings WHERE external_id=?',(str(r.get('beanId','')),)).fetchone()
+    coffee_id,routing_error=blends.route(db,r)
+    mapping={'coffee_id':coffee_id} if coffee_id else None
     errors=[]
-    if not mapping: errors.append('Map external bean ID '+str(r.get('beanId','(missing)')))
+    if not mapping: errors.append(routing_error or 'Bean mapping missing')
     try:
         roasted=stamp(datetime.fromtimestamp(int(r['dateTime'])/1000,timezone.utc));g=positive(r['weightGreen']);o=positive(r['weightRoasted'])
         if o>=g or dt(roasted)>dt(now(db)): raise ValueError()
     except (ValueError,KeyError,TypeError,OverflowError): errors.append('Confirm credible measured input/output and past roast timestamp')
+    if not errors and blends.profile(db,coffee_id):
+        try:blends.charge(db,coffee_id,roasted,g,check_stock=bool(settings(db)['cutover_at'] and dt(roasted)>=dt(settings(db)['cutover_at'])))
+        except ValueError as e:errors.append(str(e))
     if errors:
         issue(db,'roastworld',external,'import_review','; '.join(errors));return {'pending':True}
     cutover=settings(db)['cutover_at'];history=not cutover or dt(roasted)<dt(cutover)

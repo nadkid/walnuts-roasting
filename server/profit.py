@@ -113,34 +113,29 @@ def save_shipping(db, data, actor, request_id):
 
 
 def batch_costs(db):
-    """Moving weighted average of priced green stock at the measured roast date.
-    Unknown opening/count gains remain unknown until that stock is exhausted.
-    Counts reducing stock preserve average price; late/reversed purchases replay.
-    """
-    events=rows(db,"SELECT e.*,g.currency FROM green_events e JOIN green_beans g ON g.id=e.bean_id ORDER BY effective_at,CASE WHEN e.kind='count' THEN 1 ELSE 0 END,e.id")
+    """Moving weighted-average green cost, summed across all blend components."""
+    events=rows(db,"SELECT e.*,g.currency,COALESCE(e.batch_id,bc.batch_id) costing_batch_id FROM green_events e JOIN green_beans g ON g.id=e.bean_id LEFT JOIN batch_green_components bc ON bc.event_id=e.id ORDER BY effective_at,CASE WHEN e.kind='count' THEN 1 ELSE 0 END,e.id")
     reversed_ids={e['reversal_of'] for e in events if e['reversal_of']};balances={};costs={}
     for e in events:
         if e['kind']=='reversal' or e['id'] in reversed_ids:continue
         qty,value=balances.get(e['bean_id'],(0,Decimal(0)))
         if e['kind']=='purchase':
-            value=value+e['total_minor'] if value is not None and e['total_minor'] is not None and qty>=0 else None
-            qty+=e['delta_mg']
+            value=value+e['total_minor'] if value is not None and e['total_minor'] is not None and qty>=0 else None;qty+=e['delta_mg']
         elif e['kind']=='count':
-            count=e['count_mg']
-            value=Decimal(0) if count==0 else value*count/qty if value is not None and qty>0 and count<=qty else None
-            qty=count
+            count=e['count_mg'];value=Decimal(0) if count==0 else value*count/qty if value is not None and qty>0 and count<=qty else None;qty=count
         elif e['kind']=='roast':
             used=-e['delta_mg'];charge=value*used/qty if value is not None and qty>=used and qty>0 else None
-            costs[e['batch_id']]={'currency':e['currency'],'charge':charge}
-            qty-=used
-            value=value-charge if charge is not None else None
+            b=costs.setdefault(e['costing_batch_id'],{'currencies':set(),'charge':Decimal(0),'quantity':0})
+            b['currencies'].add(e['currency']);b['quantity']+=used
+            b['charge']=b['charge']+charge if b['charge'] is not None and charge is not None else None
+            qty-=used;value=value-charge if charge is not None else None
         if qty==0:value=Decimal(0)
         balances[e['bean_id']]=(qty,value)
     result={}
-    for batch in rows(db,'SELECT id,output_mg FROM batches'):
+    for batch in rows(db,'SELECT id,green_mg,output_mg FROM batches'):
         cost=costs.get(batch['id'])
-        if cost and cost['charge'] is not None and batch['output_mg']>0:
-            result[batch['id']]={'currency':cost['currency'],'rate':cost['charge']/batch['output_mg']}
+        if cost and cost['charge'] is not None and len(cost['currencies'])==1 and cost['quantity']==batch['green_mg'] and batch['output_mg']>0:
+            result[batch['id']]={'currency':next(iter(cost['currencies'])),'rate':cost['charge']/batch['output_mg']}
     return result
 
 
@@ -171,12 +166,17 @@ def estimate_context(db):
     prices={}
     for e in rows(db,"SELECT e.*,g.currency,l.coffee_id FROM green_events e JOIN green_beans g ON g.id=e.bean_id JOIN green_coffee_links l ON l.bean_id=g.id WHERE e.kind='purchase' AND e.total_minor IS NOT NULL AND e.delta_mg>0 AND NOT EXISTS(SELECT 1 FROM green_events r WHERE r.reversal_of=e.id) ORDER BY e.effective_at,e.id"):
         if dt(e['effective_at'])<=dt(now(db)):prices[e['coffee_id']]={'currency':e['currency'],'rate':Decimal(e['total_minor'])/e['delta_mg'],'at':e['effective_at']}
-    return {'prices':prices,'batches':{b['id']:b for b in rows(db,'SELECT * FROM batches')},'coffees':{c['id']:c for c in rows(db,'SELECT * FROM coffees')}}
+    bean_prices={}
+    for e in rows(db,"SELECT e.*,g.currency FROM green_events e JOIN green_beans g ON g.id=e.bean_id WHERE e.kind='purchase' AND e.total_minor IS NOT NULL AND e.delta_mg>0 AND NOT EXISTS(SELECT 1 FROM green_events r WHERE r.reversal_of=e.id) ORDER BY e.effective_at,e.id"):
+        if dt(e['effective_at'])<=dt(now(db)):bean_prices[e['bean_id']]={'currency':e['currency'],'rate':Decimal(e['total_minor'])/e['delta_mg']}
+    from . import blends
+    return {'bean_prices':bean_prices,'blend_profiles':{p['coffee_id'] for p in rows(db,'SELECT * FROM blend_profiles')},'batch_blends':blends.batch_snapshot(db),'recipes':[r for r in blends.snapshot(db)['recipes'] if not r['cancelled']],'prices':prices,'batches':{b['id']:b for b in rows(db,'SELECT * FROM batches')},'coffees':{c['id']:c for c in rows(db,'SELECT * FROM coffees')}}
 
 
 def sale_cost(picks, costs, currency, expected, coffee_id, at, context):
     cost,why=pick_cost(picks,costs,currency,expected)
     if cost is not None and (picks or expected==0):return cost,why,'recorded','Moving weighted-average green cost; actual roast yield and batch picks.'
+    if coffee_id in context.get('blend_profiles',set()):return blend_sale_cost(picks,costs,currency,expected,coffee_id,at,context)
     price=context['prices'].get(coffee_id)
     if not price:return None,'Green purchase cost missing','missing','No priced purchase is linked to this coffee profile.'
     if price['currency']!=currency:return None,'Bean cost currency differs','missing','Currency conversion is not automatic.'
@@ -202,6 +202,39 @@ def sale_cost(picks, costs, currency, expected, coffee_id, at, context):
         notes.append('sold bag weight; historical batch/overfill unavailable')
     note='Estimated using latest entered green price ('+price['at'][:10]+'); '+ '; '.join(dict.fromkeys(notes))+'.'
     return rounded(value),None,'estimated',note
+
+
+def blend_sale_cost(picks,costs,currency,expected,coffee_id,at,context):
+    if expected<=0:return None,'Sold quantity needs review','missing','A positive blend sale weight is required.'
+    notes=[]
+    def rate(batch_id=None):
+        frozen=context['batch_blends'].get(batch_id)
+        batch=context['batches'].get(batch_id)
+        if frozen:
+            ingredients=frozen['ingredients'];notes.append('saved batch recipe v'+str(frozen['version']))
+        else:
+            when=(batch.get('roasted_at') if batch else None) or at
+            recipes=[r for r in context['recipes'] if r['coffee_id']==coffee_id and when and dt(r['effective_at'])<=dt(when)]
+            if not recipes:raise ValueError('Blend recipe missing for the sale / roast date')
+            r=max(recipes,key=lambda r:(r['effective_at'],r['version']));ingredients=r['ingredients'];notes.append('dated recipe v'+str(r['version'])+'; actual batch recipe unavailable')
+        price=Decimal(0)
+        for i in ingredients:
+            p=context['bean_prices'].get(i['bean_id'])
+            if not p:raise ValueError('Green purchase cost missing for '+i['name'])
+            if p['currency']!=currency:raise ValueError('Bean cost currency differs')
+            price+=p['rate']*(Decimal(i['quantity_mg'])/batch['green_mg'] if frozen and batch and batch['green_mg']>0 else Decimal(i['bp'])/10000)
+        if batch and batch['green_mg']>0 and batch['output_mg']>0:return price*batch['green_mg']/batch['output_mg']
+        return price*10000/context['coffees'][coffee_id]['yield_bp']
+    try:
+        if picks and sum(p['quantity_mg'] for p in picks)==expected:
+            value=Decimal(0)
+            for p in picks:
+                actual=costs.get(p['batch_id'])
+                if actual and actual['currency']!=currency:raise ValueError('Bean cost currency differs')
+                value+=(p['quantity_mg']+p['overfill_mg'])*(actual['rate'] if actual else rate(p['batch_id']))
+        else:value=Decimal(expected)*rate()
+    except ValueError as e:return None,str(e),'missing',str(e)
+    return rounded(value),None,'estimated','Estimated from component green prices; '+ '; '.join(dict.fromkeys(notes))+'.'
 
 
 def finish(row):

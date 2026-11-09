@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {percentBP,splitBlend,activeRecipe,blendSettings,batchRecipeDetails} from '../static/blend-view.js';
+assert.equal(percentBP('75'),7500);assert.equal(percentBP('0.01'),1);assert.equal(percentBP('75.001'),null);assert.equal(percentBP('NaN'),null);assert.equal(percentBP('-1'),null);
+const ingredients=[{bean_id:'g',name:'Gisha',bp:7500},{bean_id:'n',name:'Nigusse',bp:2000},{bean_id:'i',name:'Ichigo',bp:500}];
+assert.deepEqual(splitBlend(1200000,ingredients).map(i=>i.quantity_mg),[900000,240000,60000]);assert.equal(splitBlend(1200001,ingredients).reduce((n,i)=>n+i.quantity_mg,0),1200001);
+const clock='2026-11-09T01:00:00Z',r={id:'v1',coffee_id:'espresso',version:1,effective_at:'2026-11-01T00:00:00Z',ingredients,notes:'House blend'},future={...r,id:'v2',version:2,effective_at:'2026-11-10T00:00:00Z'};
+assert.equal(activeRecipe([r,future],'espresso',clock).id,'v1');assert.equal(activeRecipe([{...r,cancelled:1},future],'espresso',clock),undefined);
+const S={clock,settings:{charge_mg:1200000},coffees:[{id:'espresso',name:'Espresso Blend',profile:'Espresso'}],green:{beans:ingredients.map(i=>({id:i.bean_id,name:i.name,quantity_mg:10000000}))},blends:{profiles:[{coffee_id:'espresso',source_tag:'Espresso'}],recipes:[future,r]}};
+const esc=x=>String(x??'').replaceAll('<','&lt;'),H={esc,grams:n=>n/1000+' g',date:String,btn:(s)=>s,admin:()=>true,badge:String};
+const html=blendSettings(S,H);assert.ok(html.includes('900 g'));assert.ok(html.includes('Scheduled'));assert.ok(html.includes('Change recipe'));assert.ok(html.includes('Recipe history'));
+assert.ok(blendSettings({...S,blends:{profiles:[],recipes:[]}},H).includes('Set up espresso blend'));
+assert.ok(batchRecipeDetails({...r,ingredients:splitBlend(1200000,ingredients)},H).includes('900 g'));
+assert.ok(!blendSettings({...S,coffees:[{...S.coffees[0],name:'<script>bad()</script>'}]},H).includes('<script>'));
+console.log('Blend proportions, exact rounding, dated recipe selection, editor cards and escaping passed.');

@@ -84,6 +84,60 @@ class HTTP(unittest.TestCase):
         self.assertEqual(order['shipping']['mode'],'pickup');self.assertEqual(order['shipping']['version'],1)
         self.assertEqual({r['id']:r['quantity_mg'] for r in after['stocks']},weights)
 
+    def test_pending_roasts_display_in_batches_and_completion_is_admin_only(self):
+        self.login()
+        record={'uid':'http-missing-bean','beanId':None,'dateTime':1793667600000,'weightGreen':1000,'weightRoasted':850}
+        status,result,_=self.request('roast-import',record);self.assertEqual(status,200,result)
+        _,s,_=self.request('state');pending=next(r for r in s['pending_roasts'] if r['external_id']==record['uid'])
+        self.assertFalse(any(i['source']=='roastworld' and i['external_id']==record['uid'] and i['kind']=='import_review' for i in s['issues']))
+        data={'external_id':record['uid'],'source_version':pending['source_version'],'coffee_id':'c2','green_g':'1000','output_g':'850','roasted_at':'2026-11-03T01:00:00Z','reason':'Confirmed roast label','map_bean':False}
+        self.assertEqual(self.request('roast-complete',data,'missing-csrf',csrf=False)[0],403)
+        self.request('logout',{});self.login(True)
+        self.assertEqual(self.request('roast-complete',data,'staff-completion')[0],403)
+        self.request('logout',{});self.login()
+        status,result,_=self.request('roast-complete',data,'complete-http-roast');self.assertEqual(status,200,result)
+        self.assertTrue(self.request('roast-complete',data,'complete-http-roast')[1]['duplicate'])
+        _,s,_=self.request('state');self.assertFalse(any(r['external_id']==record['uid'] for r in s['pending_roasts']))
+        self.assertEqual(sum(b['external_id']==record['uid'] for b in s['batches']),1)
+
+    def test_coffee_delete_and_restore_require_admin_and_preserve_identity(self):
+        self.login()
+        status,new,_=self.request('coffee',{'name':'HTTP deletable coffee','profile':'Filter','brew_days':2,'dispatch_days':2,'retail_days':2,'fresh_days':30,'yield_bp':8500})
+        self.assertEqual(status,200,new);payload={'id':new['id'],'archived':True}
+        self.assertEqual(self.request('coffee-archive',payload,'delete-no-csrf',csrf=False)[0],403)
+        self.request('logout',{});self.login(True)
+        self.assertEqual(self.request('coffee-archive',payload,'staff-delete')[0],403)
+        self.request('logout',{});self.login()
+        self.assertEqual(self.request('coffee-archive',payload,'admin-delete')[0],200)
+        self.assertTrue(self.request('coffee-archive',payload,'admin-delete')[1]['duplicate'])
+        _,s,_=self.request('state');coffee=next(c for c in s['coffees'] if c['id']==new['id']);self.assertTrue(coffee['archived'])
+        self.assertEqual(self.request('coffee-archive',{'id':new['id'],'archived':False},'admin-restore')[0],200)
+        _,s,_=self.request('state');self.assertFalse(next(c for c in s['coffees'] if c['id']==new['id'])['archived'])
+
+    def test_blend_recipe_import_and_permissions(self):
+        self.login()
+        status,coffee,_=self.request('coffee',{'name':'HTTP Espresso Blend','profile':'Espresso','brew_days':7,'dispatch_days':2,'retail_days':2,'fresh_days':35,'yield_bp':8500});self.assertEqual(status,200,coffee)
+        config={'coffee_id':coffee['id'],'source_tag':'HTTP Espresso','version':0}
+        self.assertEqual(self.request('blend-config',config,'blend-no-csrf',csrf=False)[0],403)
+        self.request('logout',{});self.login(True)
+        self.assertEqual(self.request('blend-config',config,'blend-staff')[0],403)
+        self.request('logout',{});self.login()
+        self.assertEqual(self.request('blend-config',config,'blend-config')[0],200)
+        self.assertTrue(self.request('blend-config',config,'blend-config')[1]['duplicate'])
+        ingredients=[]
+        for n,percent in enumerate([75,20,5]):
+            status,b,_=self.request('green-bean',{'name':'HTTP blend ingredient '+str(n),'currency':'JPY','coffee_ids':[]},'blend-bean-'+str(n));self.assertEqual(status,200,b)
+            self.assertEqual(self.request('green-purchase',{'bean_id':b['id'],'grams':'5000','total':'10000','received_at':'2026-10-01T00:00:00Z'},'blend-purchase-'+str(n))[0],200)
+            ingredients.append({'bean_id':b['id'],'percent':percent})
+        recipe={'coffee_id':coffee['id'],'version':0,'effective_at':'2026-11-01T00:00:00Z','notes':'Test house recipe','ingredients':ingredients}
+        self.assertEqual(self.request('blend-recipe',recipe,'blend-recipe')[0],200)
+        record={'uid':'http-blend-roast','roastName':'HTTP Espresso','dateTime':1793667600000,'weightGreen':1200,'weightRoasted':1020}
+        status,roast,_=self.request('roast-import',record);self.assertEqual(status,200,roast);self.assertIn('batch_id',roast)
+        self.assertTrue(self.request('roast-import',record)[1]['duplicate'])
+        _,state,_=self.request('state');batch=next(b for b in state['batches'] if b['id']==roast['batch_id'])
+        self.assertEqual([i['quantity_mg'] for i in batch['blend']['ingredients']],[900000,240000,60000])
+        self.assertEqual(sum(s['quantity_mg'] for s in state['stocks'] if s['batch_id']==batch['id']),1020000)
+
     def test_auth_csrf_authorization_and_no_secret_leak(self):
         self.assertEqual(self.request('state')[0],401);headers=self.login(True);self.assertIn('HttpOnly',headers['Set-Cookie']);self.assertIn('SameSite=Strict',headers['Set-Cookie'])
         self.assertEqual(self.request('settings',{'poll_seconds':60})[0],403);self.assertEqual(self.request('logout',{},csrf=False)[0],403);self.assertEqual(self.request('logout',{},origin='https://attacker.example')[0],403)

@@ -14,7 +14,7 @@ If a bean is roasted into multiple different profiles, do not give it an indiscr
 
 ## Daily work
 
-**Today** shows the nearest order deadlines, production priorities, bean-level green/rested/ready-to-ship balances, and café/retail stock. Connections and exceptions are managed in Settings.
+**Today** shows net coffee still to roast for customer orders, with expandable tiles per coffee/profile, followed by bean-level green/rested/ready-to-ship balances and café/retail stock. Café forecasts and retail targets stay on Roast plan. Connections and exceptions are managed in Settings.
 
 **Record a roast:** enter the actual time, green input and measured roasted output. Only output becomes stock. The batch snapshots the coffee’s policy. A future roast belongs in the plan. Complete an approved plan from its queue so actual output replaces its expected supply once. For an already imported production batch, open its detail and use “Link completed plan” with a match-confirmation reason; this replaces expected supply without posting production again.
 
@@ -140,7 +140,7 @@ and margin reports; the current latest price is not a calculated sales margin.
 
 
 ### Product mapping and Square retail-wall sales
-Open **Products & POS**. Existing Shopify mappings appear under shared products.
+Open **Settings → Products & POS**. Existing Shopify mappings appear under shared products.
 Filter catalogue entries to Square and Needs mapping; review each coffee’s
 suggested shared product, roast profile and bag size. A 150g bag must point to the
 150g product even when source names/SKUs differ. Select and exclude drinks and
@@ -228,3 +228,88 @@ idempotency protections remain active during the financial backfill.
 ### Estimated COGS for historical sales
 
 Where full batch costing is unavailable, Profit uses the latest non-reversed priced green receipt linked to the coffee profile. Without batch picks it divides that green cost by the configured roast yield and applies it to sold bag weight. With recorded picks but missing valuation it uses the actual batch yield and includes overfill. These values are labelled Estimated COGS, identified in details and CSV, and can be selected using the cost coverage filter. Estimates can revise with newly entered green prices. Recorded batch costing remains preferred. Known COGS subtotals are shown even when other sale lines still need mapping or price information. Missing currencies or unapproved product mappings are never guessed. This is reporting only and creates no stock movements.
+
+## Imported roasts needing information
+
+Roast.World records needing a bean assignment, valid date or measured weights appear
+as red **Needs information** rows in **Roast batches**, including existing saved
+imports. Import-review messages are managed there instead of the exceptions inbox.
+Administrators use **Add missing information** to confirm the coffee/profile, date
+and measured weights with a note. A real external bean ID can optionally be mapped
+for future imports; absent IDs allow only a per-roast assignment. Existing conflicting
+mappings require separate review. Completion rejects stale source versions.
+Incomplete imports do not create usable stock or planner supply. Completion posts a
+normal batch once per source ID and respects import-start and inventory-cutover
+settings. Historical roasts require opening counts. The original source snapshot is
+retained; later source edits still require review. Other issues remain in Settings.
+
+## Deleting exhausted coffees
+
+Administrators can use **Delete coffee** under **Settings → Coffees**. This removes
+the profile from the active list, new coffee selectors and Today. **Deleted coffees**
+on the same tab offers Restore. Stable coffee identities, green price links, batch
+policies, movements and sales history remain available for reporting.
+
+Deletion requires zero roasted stock (including held stock and package overfill),
+no allocations, no open unfulfilled orders, no planned roasts and no upcoming café
+forecasts or retail targets. The last active profile for a green bean also requires
+its green balance to be zero. Shared beans remain visible while another profile is
+active. Standalone green stock is not deleted by removing a coffee profile.
+
+Past forecasts for removed coffees are retained but excluded from planning. If a
+stock movement later creates a positive balance for a removed coffee, its profile
+is restored automatically and this is audited. Explicit Restore does not create
+stock. Source mappings remain intact. Migration 012 adds only coffee_archives;
+no historical inventory or financial records are removed. Deletion/restore and
+automatic restoration events appear in audit and export.
+
+## Espresso recipes: mix and roast per batch
+
+At the top of **Settings → Coffees**, use **Set up espresso blend** and select the
+existing finished Espresso coffee. The default import label is Espresso. The
+current Roast.World list exposes `roastName` (confirmed against live imports), so
+use **Espresso as the roast name** in RoasTime. Explicit roast tags are supported
+when present in the source response; bean tags are not used as a substitute for
+roast tags. Matching is exact after trimming and case folding, never a partial-name
+match. Ambiguous blend matches stay pending in Roast batches.
+
+Create a recipe by choosing real Green beans, entering percentages totalling
+exactly 100%, and setting **Use for roasts from (JST)**. The charge preview shows
+integer-milligram weigh-outs and preserves the total through largest-remainder
+rounding. The entered recipe is green-input proportions, not roasted-output
+proportions. Actual roasted output remains one finished Espresso batch. The
+Espresso coffee must not also have a single-bean green link.
+
+Recipe changes create immutable versions. Import chooses the latest non-cancelled
+version effective at the original roast timestamp, not import time. Every batch
+stores its recipe ID, ingredient names, proportions and exact input weights.
+Existing batches never adopt a later recipe. An explicit per-roast recipe override
+requires a note. Unused recipe versions may be cancelled; used versions remain
+part of history. The next version must start later than existing active versions.
+
+Missing recipes, invalid weights and insufficient recorded components remain red
+pending roasts. Enter actual receipts/counts or explicitly review the roast; no
+automatic recipe substitutions occur. All component deductions and the roasted
+output post in one transaction and are once-only per source roast identity. A
+production reversal returns every component. Existing cutover and later-physical-
+count treatment remains in effect. Historical pre-cutover batches do not post
+physical stock or component deductions. Stock-only additions do not consume green.
+
+Green beans shows ingredient requirements from approved blend roast plans. Roast
+plan suggestions show their proposed ingredients. Today tracks the finished blend
+as Espresso while green stock remains under the individual ingredients. Batch
+details show the recipe snapshot and weigh-out.
+
+Recorded batch COGS sums moving-average costs of every green component and divides
+by the measured finished output. A missing component price prevents a recorded
+cost; labelled estimates can use component purchase prices with the batch's frozen
+recipe and actual yield. Without batch picks, estimates use the recipe effective
+at the sale timestamp and the configured yield; they identify that the actual batch
+is unknown. They never use a recipe effective after that timestamp. Component
+currencies must match; no automatic currency conversion is supplied.
+
+Migration 013 adds recipe/profile/snapshot/component tables without rebuilding or
+rewriting the immutable green ledger. Legacy single-bean events retain their batch
+reference. Blend component events use the separate batch_green_components
+references, allowing multiple component deductions per roast. Export includes all
+new recipe and component records. No recipe is activated automatically on deploy.

@@ -1,0 +1,12 @@
+CREATE TABLE blend_profiles(coffee_id TEXT PRIMARY KEY REFERENCES coffees(id),source_tag TEXT NOT NULL COLLATE NOCASE UNIQUE,version INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE blend_recipes(id TEXT PRIMARY KEY,coffee_id TEXT NOT NULL REFERENCES blend_profiles(coffee_id),version INTEGER NOT NULL,effective_at TEXT NOT NULL,ingredients TEXT NOT NULL,notes TEXT NOT NULL,created_at TEXT NOT NULL,actor TEXT NOT NULL,UNIQUE(coffee_id,version));
+CREATE INDEX blend_recipe_dates ON blend_recipes(coffee_id,effective_at);
+CREATE TABLE blend_recipe_cancellations(recipe_id TEXT PRIMARY KEY REFERENCES blend_recipes(id),at TEXT NOT NULL,actor TEXT NOT NULL,reason TEXT NOT NULL);
+CREATE TABLE batch_blends(batch_id TEXT PRIMARY KEY REFERENCES batches(id),recipe_id TEXT NOT NULL REFERENCES blend_recipes(id),ingredients TEXT NOT NULL);
+CREATE TABLE batch_green_components(batch_id TEXT NOT NULL REFERENCES batch_blends(batch_id),bean_id TEXT NOT NULL REFERENCES green_beans(id),quantity_mg INTEGER NOT NULL CHECK(quantity_mg>0),event_id INTEGER NOT NULL UNIQUE REFERENCES green_events(id),PRIMARY KEY(batch_id,bean_id));
+CREATE TRIGGER blend_recipes_immutable_update BEFORE UPDATE ON blend_recipes BEGIN SELECT RAISE(ABORT,'Recipe versions are immutable'); END;
+CREATE TRIGGER blend_recipes_immutable_delete BEFORE DELETE ON blend_recipes BEGIN SELECT RAISE(ABORT,'Recipe versions are immutable'); END;
+CREATE TRIGGER batch_blends_immutable_update BEFORE UPDATE ON batch_blends BEGIN SELECT RAISE(ABORT,'Batch recipe snapshots are immutable'); END;
+CREATE TRIGGER batch_blends_immutable_delete BEFORE DELETE ON batch_blends BEGIN SELECT RAISE(ABORT,'Batch recipe snapshots are immutable'); END;
+CREATE TRIGGER blend_components_immutable_update BEFORE UPDATE ON batch_green_components BEGIN SELECT RAISE(ABORT,'Batch components are immutable'); END;
+CREATE TRIGGER blend_components_immutable_delete BEFORE DELETE ON batch_green_components BEGIN SELECT RAISE(ABORT,'Batch components are immutable'); END;

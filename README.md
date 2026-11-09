@@ -62,7 +62,9 @@ The HTTP tests open a temporary loopback port. All tests use disposable database
 
 ## Today dashboard
 
-Today starts with orders for the earliest outstanding dispatch/pickup day in Tokyo time, including overdue orders. Cancelled, archived, fully fulfilled orders and wholesale drafts are excluded; orders without a deadline are flagged for review. Fulfillment and production states are shown separately. Production priorities show the first three requirements by roast deadline, with the full queue under Roast plan.
+Today starts with **Coffee to roast**: one tile per active coffee and roast profile. The main number is net roasted coffee still needed for all open, eligible customer orders, after suitable physical stock is spent once by deadline. Bulk grams can be consolidated before packing; existing packed bags must match the ordered size. Overdue orders use stock suitable for dispatch now, while retaining their original deadline alert. Café forecasts and retail targets are excluded; actual reservations for them still protect their stock. Cancelled, archived, fully fulfilled, unpaid/ineligible orders and wholesale drafts are excluded. Coffee profiles stay distinct, and Espresso remains one finished blend.
+
+Click a tile to see each unfulfilled order, remaining bags, due date and net weight to roast. Approved roasts appear as a scheduled portion of work still to roast, never as physical stock. Their supply must be ready by the order deadline. Unapproved suggestions do not reduce the quantity. Green charges and blend ingredient amounts are estimates shown only inside the expansion. Missing mappings and deadlines remain visible for review; undated orders are not presented as a known zero. The previous Upcoming deadlines and Production priorities panels are replaced, while all stock panels remain below.
 
 The bean overview combines roast profiles linked to the same green bean without duplicating its green balance. Green stock below **5 kg** is highlighted red; unlinked profiles show an unknown green balance. **Rested** means physical roasted stock meeting its batch's café policy. **Ready to ship** means packaged net weight meeting the dispatch policy, including allocated bags. These columns can overlap; both exclude quality holds, archived batches and out-of-policy stock. Café and retail panels show physical quantities per bean, including overfill, with held/archived quantities labelled. Connections and reconciliation remain in Settings.
 
@@ -112,7 +114,7 @@ Refresh Orders and choose **+ New wholesale order**. Enter customer details, cof
 
 ## Square retail-wall integration
 
-Add `SQUARE_ACCESS_TOKEN` privately to `.env`, restart, and open **Products & POS**.
+Add `SQUARE_ACCESS_TOKEN` privately to `.env`, restart, and open **Settings → Products & POS**.
 The read-only connection imports Square catalogue variations and completed receipts.
 A single active Square shop is selected in preview mode; multiple locations require
 an explicit choice. Existing Shopify coffee/package mappings are reused. Review
@@ -136,3 +138,9 @@ sessions were cleared. Shopify, Square and Roast.World passed hosted sync checks
 Square remains in Beans-only preview mode until mappings and physical wall stock
 are ready. The local production service is stopped and Start live.command opens
 the hosted URL. See docs/FLY.md for future deployments, backup and recovery.
+
+## Commitment status colors
+
+Products and point-of-sale configuration are under **Settings → Products & POS**. Old `#products` bookmarks open the new tab.
+
+Order and production cards use solid headers with a written status: green for covered/on-track commitments and fulfilled orders, yellow for missing information or work needing attention, and red for outstanding orders past their dispatch/pickup deadline. Uncovered production also turns red when its roast deadline is missed. Resting coffee and scheduled supply can be on track if ready by the commitment date. Fulfilled orders stay green after their deadline, except when their actual stock pick still needs recording. Cancelled/draft orders and archived orders with remaining items are marked for review rather than treated as overdue commitments. Colors and written statuses are used on Today, Orders and Roast plan.

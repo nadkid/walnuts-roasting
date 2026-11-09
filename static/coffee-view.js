@@ -1,0 +1,12 @@
+// Deletion removes an exhausted coffee from active views while preserving its identity.
+export function coffeeSettings(S,h){
+ const {esc,btn,badge,empty,admin}=h,active=S.coffees.filter(c=>!c.archived&&!(S.blends?.profiles||[]).some(p=>p.coffee_id===c.id)),removed=S.coffees.filter(c=>c.archived);
+ return `<section class="panel"><div class="panel-heading"><h2>Single-origin coffees & rest policies</h2>${admin()?btn('+ Add coffee','new-coffee',{},'primary'):''}</div><div class="table-wrap"><table><thead><tr><th>Coffee / profile</th><th>Café rest</th><th>Dispatch rest</th><th>Retail rest</th><th>Freshness window</th><th></th></tr></thead><tbody>${active.map(c=>`<tr><td><b>${esc(c.name)}</b><small>${esc(c.profile)} · policy v${c.policy_version}</small></td><td>${c.brew_days} days</td><td>${c.dispatch_days??'Not set'}${c.dispatch_days!=null?' days':''}</td><td>${c.retail_days??'Not set'}${c.retail_days!=null?' days':''}</td><td>${c.fresh_days} days<small>Operational quality window</small></td><td><div class="actions">${admin()?btn('Edit','coffee',{id:c.id},'small-btn')+btn('Delete coffee','coffee-delete',{id:c.id},'small-btn danger-text'):''}</div></td></tr>`).join('')}</tbody></table></div>${!active.length?empty('Add your coffees','Café guidance: 45 days for pour-over, 7 days for espresso; confirm per bean.'):''}</section>${removed.length?`<details class="panel deleted-coffees"><summary>Deleted coffees (${removed.length})</summary><p>Removed from the dashboard and new coffee selectors. Roast, stock and sales history is retained. Restore a coffee to use it again.</p>${removed.map(c=>`<div class="list-row"><div><b>${esc(c.name)}</b><small>${esc(c.profile)}</small></div>${admin()?btn('Restore','coffee-restore',{id:c.id},'small-btn'):badge('Deleted','outline')}</div>`).join('')}</details>`:''}`;
+}
+export async function coffeeVisibilityAction(d,S,h){
+ const c=S.coffees.find(c=>c.id===d.id);if(!c)return;
+ if(d.action==='coffee-restore'){
+  await h.api('coffee-archive',{id:c.id,archived:false},crypto.randomUUID());await h.refresh();return;
+ }
+ h.modal('Delete coffee · '+c.name,h.notice(h.esc(c.name)+' · '+h.esc(c.profile)+'<br>Remove this coffee from the active list and Today dashboard. Its history stays available, and you can restore it from Deleted coffees.')+h.notice('The coffee must have no roasted stock or open commitments. If this is the last profile linked to a green bean, its green balance must also be zero.'),(data,key)=>h.api('coffee-archive',{id:c.id,archived:true},key),'Delete coffee');
+}

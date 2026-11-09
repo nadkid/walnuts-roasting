@@ -7,20 +7,24 @@ from urllib.parse import urlsplit,parse_qs
 from .db import ROOT,connect,migrate,transaction,rows,one,settings,uid
 from .domain import *
 from .imports import roast_import,order_import,csv_preview,fulfillment_pick,release_excess
+from .roast_review import pending_roasts,complete_roast
 from .planner import plan
+from .today import customer_roast
 from .wholesale import save_order,dispatch_order
 from .auth import password_hash,login,token_hash
 from .adapters import Scheduler
-from . import green,products,square,profit
+from . import green,products,square,profit,coffees,blends
 
 LIMIT=2*1024*1024
 
 def state(db,user,scheduler):
-    cfg=settings(db);clock=now(db);stocks=[]
+    cfg=settings(db);clock=now(db);stocks=[];pending=pending_roasts(db);pending_ids={p['external_id'] for p in pending}
     for r in rows(db,'SELECT id FROM stocks'):
         s=stock(db,r['id']);s['free_mg']=s['quantity_mg']-s['reserved_mg'];s['readiness']={u:dict(zip(('eligible','ready_at','label'),eligibility(s,u,clock))) for u in ('brew','dispatch','retail')};stocks.append(s)
     batches=rows(db,'SELECT b.*,c.name coffee,c.profile FROM batches b LEFT JOIN coffees c ON c.id=b.coffee_id ORDER BY roasted_at DESC')
+    blend_batches=blends.batch_snapshot(db)
     for b in batches:
+        b['blend']=blend_batches.get(b['id'])
         b['stock_only']=bool(b['history_only'] and not b['green_mg'] and not b['output_mg'])
         b['remaining_mg']=sum(s['quantity_mg']+s['overfill_mg'] for s in stocks if s['batch_id']==b['id']);b['readiness']={u:dict(zip(('eligible','ready_at','label'),eligibility(b,u,clock))) for u in ('brew','dispatch','retail')}
         b.pop('source_json',None)
@@ -55,7 +59,7 @@ def state(db,user,scheduler):
         runs=rows(db,'SELECT * FROM sync_runs WHERE source=? ORDER BY started_at DESC,rowid DESC LIMIT 1',(source,));success=rows(db,"SELECT finished_at FROM sync_runs WHERE source=? AND status='success' ORDER BY finished_at DESC LIMIT 1",(source,))
         last=success[0]['finished_at'] if success else None
         sync[source]={'configured':configured and not cfg['demo'],'last_attempt':runs[0] if runs else None,'last_success':last,'stale':not last or (dt(stamp())-dt(last)).total_seconds()>cfg['poll_seconds']*2}
-    return {'user':{k:user[k] for k in ('id','name','role')},'settings':cfg,'clock':clock,'shop_admin_url':('https://'+os.environ['SHOPIFY_SHOP']+'/admin') if re.fullmatch(r'[a-z0-9][a-z0-9-]*\.myshopify\.com',os.getenv('SHOPIFY_SHOP','')) else None,'products':products.snapshot(db),'square':square.snapshot(db),'green':green.snapshot(db),'stocks':stocks,'batches':batches,'orders':orders,'coffees':rows(db,'SELECT * FROM coffees'),'locations':rows(db,'SELECT * FROM locations'),'packages':rows(db,'SELECT * FROM packages'),'reservations':rows(db,'SELECT r.*,b.code FROM reservations r JOIN stocks s ON s.id=r.stock_id JOIN batches b ON b.id=s.batch_id'),'variants':rows(db,'SELECT * FROM variants'),'bean_mappings':rows(db,'SELECT * FROM bean_mappings'),'demands':rows(db,'SELECT * FROM demands'),'plans':rows(db,'SELECT p.*,c.name coffee FROM plans p JOIN coffees c ON c.id=p.coffee_id ORDER BY roast_at'),'issues':rows(db,'SELECT * FROM issues WHERE resolved=0 ORDER BY created_at DESC'),'sync':sync,'planner':plan(db),'fulfillments':rows(db,'SELECT * FROM fulfillment_events WHERE recorded=0'),'imports':rows(db,"SELECT source,external_id,payload FROM imports WHERE source IN ('beans','roastworld')"),'users':rows(db,'SELECT id,name,role,active FROM users') if user['role']=='admin' else []}
+    return {'user':{k:user[k] for k in ('id','name','role')},'settings':cfg,'clock':clock,'shop_admin_url':('https://'+os.environ['SHOPIFY_SHOP']+'/admin') if re.fullmatch(r'[a-z0-9][a-z0-9-]*\.myshopify\.com',os.getenv('SHOPIFY_SHOP','')) else None,'blends':blends.snapshot(db),'products':products.snapshot(db),'square':square.snapshot(db),'green':green.snapshot(db),'stocks':stocks,'pending_roasts':pending,'batches':batches,'orders':orders,'coffees':coffees.snapshot(db),'locations':rows(db,'SELECT * FROM locations'),'packages':rows(db,'SELECT * FROM packages'),'reservations':rows(db,'SELECT r.*,b.code FROM reservations r JOIN stocks s ON s.id=r.stock_id JOIN batches b ON b.id=s.batch_id'),'variants':rows(db,'SELECT * FROM variants'),'bean_mappings':rows(db,'SELECT * FROM bean_mappings'),'demands':rows(db,'SELECT * FROM demands'),'plans':rows(db,'SELECT p.*,c.name coffee FROM plans p JOIN coffees c ON c.id=p.coffee_id ORDER BY roast_at'),'issues':[i for i in rows(db,'SELECT * FROM issues WHERE resolved=0 ORDER BY created_at DESC') if not(i['source']=='roastworld' and i['kind']=='import_review' and i['external_id'] in pending_ids)],'sync':sync,'planner':plan(db),'customer_roast':customer_roast(db),'fulfillments':rows(db,'SELECT * FROM fulfillment_events WHERE recorded=0'),'imports':rows(db,"SELECT source,external_id,payload FROM imports WHERE source IN ('beans','roastworld')"),'users':rows(db,'SELECT id,name,role,active FROM users') if user['role']=='admin' else []}
 
 class Server(ThreadingHTTPServer):
     daemon_threads=True
@@ -99,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200,{'movements':rows(db,'SELECT m.*,e.delta_mg,e.delta_overfill_mg,s.location_id,s.package_id FROM entries e JOIN movements m ON m.id=e.movement_id JOIN stocks s ON s.id=e.stock_id WHERE s.batch_id=? ORDER BY m.at DESC,m.rowid DESC',(batch,)),'audit':rows(db,'SELECT * FROM audit ORDER BY id DESC LIMIT 200')})
                 if path=='/api/export':
                     if user['role']!='admin':return self.send(403,{'error':'Administrator access required.'})
-                    return self.send(200,{'exported_at':stamp(),'order_financials':rows(db,'SELECT * FROM order_financials'),'order_shipping':rows(db,'SELECT * FROM order_shipping'),'fulfillment_picks':rows(db,'SELECT * FROM fulfillment_picks'),'square_return_orders':rows(db,'SELECT * FROM square_return_orders'),'sale_products':rows(db,'SELECT * FROM sale_products'),'sale_catalog':rows(db,'SELECT * FROM sale_catalog'),'square_sales':rows(db,'SELECT * FROM square_sales'),'square_sale_picks':rows(db,'SELECT * FROM square_sale_picks'),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
+                    return self.send(200,{'exported_at':stamp(),'blend_profiles':rows(db,'SELECT * FROM blend_profiles'),'blend_recipes':rows(db,'SELECT * FROM blend_recipes'),'blend_recipe_cancellations':rows(db,'SELECT * FROM blend_recipe_cancellations'),'batch_blends':rows(db,'SELECT * FROM batch_blends'),'batch_green_components':rows(db,'SELECT * FROM batch_green_components'),'coffee_archives':rows(db,'SELECT * FROM coffee_archives'),'order_financials':rows(db,'SELECT * FROM order_financials'),'order_shipping':rows(db,'SELECT * FROM order_shipping'),'fulfillment_picks':rows(db,'SELECT * FROM fulfillment_picks'),'square_return_orders':rows(db,'SELECT * FROM square_return_orders'),'sale_products':rows(db,'SELECT * FROM sale_products'),'sale_catalog':rows(db,'SELECT * FROM sale_catalog'),'square_sales':rows(db,'SELECT * FROM square_sales'),'square_sale_picks':rows(db,'SELECT * FROM square_sale_picks'),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
                 return self.send(404,{'error':'Unknown endpoint.'})
             relative='index.html' if path=='/' else path.lstrip('/')
             f=(ROOT/'static'/relative).resolve()
@@ -156,7 +160,7 @@ class Handler(BaseHTTPRequestHandler):
             user=self.session(db)
             if not user:return self.send(401,{'error':'Session expired. Sign in again.'})
             if not secrets.compare_digest(self.headers.get('X-CSRF-Token',''),user['csrf']):return self.send(403,{'error':'Session token missing. Reload and retry.'})
-            admin=path in ('/api/settings','/api/coffee','/api/package','/api/location','/api/user','/api/variant','/api/bean-map','/api/csv-preview','/api/csv-commit','/api/retry-import','/api/batch-policy','/api/issue','/api/order-import','/api/sync','/api/roast-import','/api/green-reverse','/api/product-map','/api/product-map-batch','/api/square-config','/api/square-retry','/api/square-acknowledge') or (path=='/api/move' and d.get('kind') in ('reverse','return'))
+            admin=path in ('/api/settings','/api/coffee','/api/coffee-archive','/api/blend-config','/api/blend-recipe','/api/blend-recipe-cancel','/api/package','/api/location','/api/user','/api/variant','/api/bean-map','/api/csv-preview','/api/csv-commit','/api/retry-import','/api/batch-policy','/api/issue','/api/order-import','/api/sync','/api/roast-import','/api/roast-complete','/api/green-reverse','/api/product-map','/api/product-map-batch','/api/square-config','/api/square-retry','/api/square-acknowledge') or (path=='/api/move' and d.get('kind') in ('reverse','return'))
             if admin and user['role']!='admin':return self.send(403,{'error':'Administrator access required.'})
             actor=user['name'];request=self.headers.get('Idempotency-Key','')
             if path=='/api/sync':
@@ -213,6 +217,10 @@ class Handler(BaseHTTPRequestHandler):
                 for l in rows(db,'SELECT l.id,o.payment,o.cancelled,o.source FROM lines l JOIN orders o ON o.id=l.order_id'):
                     if l['source']!='wholesale' and (l['cancelled'] or l['payment'] not in d['eligible_payments']):release_excess(db,l['id'],0,actor)
             audit(db,actor,'settings',d);return
+        if path=='/api/blend-config':return blends.save_profile(db,d,actor,request)
+        if path=='/api/blend-recipe':return blends.save_recipe(db,d,actor,request)
+        if path=='/api/blend-recipe-cancel':return blends.cancel_recipe(db,d,actor,request)
+        if path=='/api/coffee-archive':return coffees.set_archived(db,d,actor,request)
         if path=='/api/coffee':
             id=d.get('id') or uid();brew=int(d['brew_days']);dispatch=None if d.get('dispatch_days') in (None,'') else int(d['dispatch_days']);retail=None if d.get('retail_days') in (None,'') else int(d['retail_days']);fresh=int(d['fresh_days']);yb=int(d['yield_bp'])
             if fresh<=brew or (dispatch is not None and fresh<=dispatch) or (retail is not None and fresh<=retail):raise ValueError('Freshness window must extend beyond the selected rest periods.')
@@ -238,6 +246,7 @@ class Handler(BaseHTTPRequestHandler):
             audit(db,actor,'variant_mapping',d);products.seed_shopify(db);return
         if path=='/api/bean-map':
             db.execute('INSERT INTO bean_mappings VALUES (?,?) ON CONFLICT(external_id) DO UPDATE SET coffee_id=excluded.coffee_id',(d['external_id'],d['coffee_id']));audit(db,actor,'bean_mapping',d);return
+        if path=='/api/roast-complete':return complete_roast(db,d,actor,request)
         if path=='/api/roast-import':return roast_import(db,d,actor)
         if path=='/api/retry-import':return roast_import(db,json.loads(one(db,"SELECT payload FROM imports WHERE source='roastworld' AND external_id=?",(d['external_id'],))['payload']),actor)
         if path=='/api/order-import':return order_import(db,d,actor)
@@ -288,6 +297,7 @@ class Handler(BaseHTTPRequestHandler):
             if db.execute("SELECT 1 FROM plans WHERE status='planned' AND roast_at=? AND id!=?",(roast,d.get('id',''))).fetchone():raise ValueError('This roast slot is occupied. Choose another slot.')
             if dt(roast)<dt(now(db)):raise ValueError('A plan cannot be scheduled in the past. Review the deadline conflict.')
             id=d.get('id') or uid();expected=positive(d['expected_g'])
+            blends.charge(db,c['id'],roast,g,check_stock=False)
             if expected>=g:raise ValueError('Expected roasted output must be below green input.')
             old=db.execute('SELECT * FROM plans WHERE id=?',(id,)).fetchone()
             if old and old['status']!='planned':raise ValueError('Only open plans can be edited.')

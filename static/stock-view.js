@@ -38,7 +38,7 @@ export function stockPage(S,h,f){
 
 export function addRoastedStockForm(S,h){
   const {modal,notice,select,field,area,options,esc,grams,date,localInput,iso,api}=h;
-  if(!S.coffees.length)return modal('Set up coffees first',notice('Add your coffee profiles and rest policies in Settings before adding roasted stock.'),null);
+  if(!S.coffees.some(c=>!c.archived))return modal('Set up coffees first',notice('Add your coffee profiles and rest policies in Settings before adding roasted stock.'),null);
   const batches=S.batches.filter(b=>!b.archived);
   const batchOptions=[['','New / unrecorded batch'],...batches.map(b=>[b.id,`${b.code} · ${b.coffee} · ${date(b.roasted_at)} · ${grams(b.remaining_mg)} on hand`])];
   modal('Add roasted stock',notice('Record coffee that is already roasted. This adds to roasted inventory without recording production or deducting green beans. For a recount of stock already listed, use Count stock and enter its actual total instead.')+
@@ -54,7 +54,7 @@ export function addRoastedStockForm(S,h){
   function renderBatch(){
     const b=batches.find(b=>b.id===batch.value);
     dialog.querySelector('#stock-add-batch').innerHTML=b?notice(`<b>${esc(b.coffee)} · ${esc(b.profile)}</b><br>Roasted ${b.roasted_at?date(b.roasted_at,true)+' JST':'date unknown'}. This keeps the existing batch’s rest rules${b.held?' and quality hold':''}.`):
-      select('Coffee / profile','coffee_id',options(S.coffees.map(c=>[c.id,c.name+' · '+c.profile])))+
+      select('Coffee / profile','coffee_id',options(S.coffees.filter(c=>!c.archived).map(c=>[c.id,c.name+' · '+c.profile])))+
       field('Original roast date (JST, if known)','roasted_at','datetime-local','','max="'+localInput(S.clock)+'"')+
       field('Batch code (optional)','code')+notice('Leave the roast date blank if unknown. This stock will remain unavailable for brewing or dispatch until an administrator sets the date in the batch details.');
   }

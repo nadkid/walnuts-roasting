@@ -48,7 +48,7 @@ Use an HTTPS reverse proxy and expose only it. The app’s lightweight HTTP list
 
 - One database and one app process; no clustered/shared-filesystem SQLite or ephemeral serverless disk.
 - Simple app-level roles, not SSO, MFA, tenant isolation or per-location permissions.
-- One coffee/profile per batch. No blending or cross-batch pooling; use explicit multiple allocations/picks to preserve provenance.
+- One finished coffee/profile per batch. Pre-roast blends use dated recipe versions and immutable per-batch ingredient snapshots. Post-roast blending and cross-batch pooling remain unsupported; use explicit multiple allocations/picks to preserve provenance.
 - Bundles stay unresolved until components are explicitly modeled; automatic bundle composition is not supplied.
 - Square imports completed fixed-bag retail receipts with FIFO wall picks. Café dose estimates, retail sales forecasts, Square webhooks and outbound platform inventory updates remain deferred.
 - English interface; shared labels are organized for localization, but full Japanese translation is not implemented.

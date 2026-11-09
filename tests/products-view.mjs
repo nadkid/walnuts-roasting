@@ -13,3 +13,5 @@ S.settings.square_enabled=false;html=productsPage(S,h);
 assert(html.includes('Preview mode'));
 assert(!html.includes('Deductions scheduled'));
 console.log('Square products view: scheduled, active and preview processing states passed.');
+
+html=productsPage(S,h,{embedded:true});assert(html.includes('settings-section-heading'));assert(html.includes('Sync Shopify catalogue'));assert(html.includes('Products & POS'));

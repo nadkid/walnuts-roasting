@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {coffeeRoastPanel,bindCoffeeRoast} from '../static/coffee-roast-view.js';
+const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const h={esc,grams:n=>n/1000+' g',date:s=>s,empty:(title)=>title,draw:()=>{html=coffeeRoastPanel(S,h)}};
+const coffee={coffee_id:'espresso',name:'Espresso Blend',profile:'Espresso',roast_mg:1500000,scheduled_mg:500000,unplanned_mg:1000000,unknown_lines:0,roast_by:'2026-11-10T01:00:00Z',due_at:'2026-11-14T01:00:00Z',tone:'yellow',status:'To schedule',green_mg:1800000,notes:[],orders:[{id:'o1',number:'#1234',source:'shopify',due_at:'2026-11-14T01:00:00Z',required_mg:1500000,stock_mg:0,roast_mg:1500000,quantities:[{units:10,unit_mg:150000}]}],blend_components:[{name:'Gisha',quantity_mg:1350000},{name:'Nigusse',quantity_mg:450000}]};
+const S={customer_roast:{coffees:[coffee],unmapped_orders:0}};
+let html=coffeeRoastPanel(S,h);
+assert(html.includes('1,500')||html.includes('1500 g'));
+assert(html.includes('500 g scheduled'));assert(html.includes('Roast by'));
+assert(!html.includes('#1234'),'order details stay hidden until requested');
+assert(!html.includes('Approx. green charge'),'secondary information stays in the expansion');
+assert(html.includes('aria-expanded="false"'));assert(!html.includes('forecast'));
+// Exercise the same click binding used by the live page, including refresh and close.
+const tile={dataset:{roastCoffee:'espresso'},focus:()=>{},scrollIntoView:()=>{}};
+const close={addEventListener:(_,fn)=>{close.click=fn}},detail={scrollIntoView:()=>{}};
+globalThis.CSS={escape:x=>x};
+globalThis.document={querySelectorAll:()=>[tile],querySelector:s=>s==='[data-close-roast-detail]'?close:tile,getElementById:()=>detail};
+bindCoffeeRoast(S,h);tile.onclick();
+assert(html.includes('aria-expanded="true"'));assert(html.includes('#1234'));assert(html.includes('10 × 150 g'));assert(html.includes('Approx. green charge'));assert(html.includes('Gisha 1350 g'));
+h.draw();assert(html.includes('aria-expanded="true"'),'refresh retains the expanded coffee');
+bindCoffeeRoast(S,h);close.click();assert(!html.includes('#1234'));
+const malicious=structuredClone(S);malicious.customer_roast.coffees[0].name='<img src=x>';malicious.customer_roast.coffees[0].coffee_id='" onclick="bad()';
+assert(!coffeeRoastPanel(malicious,h).includes('<img src=x>'));assert(!coffeeRoastPanel(malicious,h).includes('" onclick="bad()'));
+const unknown=structuredClone(S);Object.assign(unknown.customer_roast.coffees[0],{unknown_lines:1,roast_mg:0,roast_by:null,due_at:null,status:'Set deadline'});
+assert(coffeeRoastPanel(unknown,h).includes('Deadline needed'));assert(!coffeeRoastPanel(unknown,h).includes('0 g</span>'),'unknown coverage is never a reassuring zero');
+assert(coffeeRoastPanel({customer_roast:{coffees:[],unmapped_orders:0}},h).includes('No coffees in your lineup'));
+assert(coffeeRoastPanel({customer_roast:{coffees:[],unmapped_orders:2}},h).includes('2 orders need a product mapping'));
+console.log('Coffee tiles: quiet defaults, quantities, keyboard-compatible controls, expansion, refresh retention, close, unknown data, empty states and escaping passed.');

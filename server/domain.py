@@ -53,6 +53,9 @@ def delta(db,movement,id,amount,extra=None):
     if extra is None:
         extra=(s['overfill_mg']*abs(amount)//s['quantity_mg'])*(1 if amount>=0 else -1) if s['package_mg'] and s['quantity_mg'] else 0
     if s['overfill_mg']+extra<0 or (not s['package_mg'] and extra):raise ValueError('Invalid measured packaging overfill.')
+    if result+ s['overfill_mg']+extra>0 and db.execute('SELECT 1 FROM coffee_archives WHERE coffee_id=?',(s['coffee_id'],)).fetchone():
+        db.execute('DELETE FROM coffee_archives WHERE coffee_id=?',(s['coffee_id'],))
+        audit(db,'Inventory','coffee_restored_for_stock',{'id':s['coffee_id'],'movement_id':movement})
     db.execute('UPDATE stocks SET quantity_mg=?,overfill_mg=overfill_mg+?,version=version+1 WHERE id=?',(result,extra,id))
     db.execute('INSERT INTO entries(movement_id,stock_id,delta_mg,delta_overfill_mg) VALUES (?,?,?,?)',(movement,id,amount,extra))
     return extra
@@ -82,6 +85,9 @@ def create_batch(db,d,actor,request_id,external=None,history=False):
         p=one(db,'SELECT * FROM plans WHERE id=?',(plan,))
         if p['status']!='planned' or p['coffee_id']!=c['id']: raise ValueError('Plan must be open and match this coffee.')
     db.execute('INSERT INTO batches(id,code,coffee_id,external_id,roasted_at,green_mg,output_mg,policy,notes,green_lot,history_only,plan_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',(id,code,c['id'],external,roasted,green,output,json.dumps(policy(c)),d.get('notes',''),d.get('green_lot',''),int(history),plan))
+    from . import blends
+    if d.get('recipe_id') and not str(d.get('notes') or '').strip():raise ValueError('Add a note explaining the recipe override.')
+    blends.attach(db,id,d.get('recipe_id'))
     if not history:
         delta(db,m,stock_id(db,id,d.get('location_id','roastery')),output)
         from .green import record_roast

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {roastBatchesPage,completeRoastForm} from '../static/roast-view.js';
+const esc=x=>String(x??'').replaceAll('<','&lt;');
+const h={esc,heading:()=>'',btn:(label,action)=>`<button data-action="${action}">${label}</button>`,date:String,grams:n=>n/1000+' g',badge:(x,k)=>`<span class="${k}">${x}</span>`,empty:String,admin:()=>true};
+const r={external_id:'missing-bean',bean_id:'',source_version:'v',roasted_at:'2026-11-09T01:00:00Z',green_mg:1000000,output_mg:850000,missing:['Bean assignment missing']};
+const S={pending_roasts:[r],batches:[],coffees:[]};
+const html=roastBatchesPage(S,h);assert.ok(html.includes('roast-needs-info'));assert.ok(html.includes('Add missing information'));assert.ok(html.includes('Bean not assigned'));assert.ok(html.includes('1000 g → 850 g'));assert.ok(!html.includes('Your first batch starts here'));
+assert.ok(!roastBatchesPage(S,{...h,admin:()=>false}).includes('Add missing information'));
+assert.ok(!roastBatchesPage({...S,pending_roasts:[{...r,external_id:'<script>bad()</script>'}]},h).includes('<script>'));
+let save,form;
+completeRoastForm(r,S,{...h,modal:(title,body,submit)=>{form=body;save=submit},notice:String,select:()=>'',options:()=>'',field:()=>'',area:()=>'',localInput:String,clock:()=>'',api:(route,data)=>({route,data}),iso:String});
+assert.ok(form.includes('no bean ID'));assert.throws(()=>save({coffee_id:''},'key'));
+const result=save({coffee_id:'c',roasted_at:'2026-11-09',map_bean:undefined},'key');assert.equal(result.route,'roast-complete');assert.equal(result.data.map_bean,false);assert.equal(result.data.source_version,'v');
+console.log('Pending roast rows, highlighting, permissions, escaping and completion form passed.');
