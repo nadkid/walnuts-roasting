@@ -2,7 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 import json, math
 from .db import rows, one, settings
-from .domain import dt, stamp, now, JST, eligibility, stock, order_eligible, at_roastery
+from .domain import dt, stamp, now, JST, eligibility, stock, order_eligible, at_roastery, order_dispatch_at
 
 def plan(db,horizon=14):
     cfg=settings(db);clock=dt(now(db));end=clock+timedelta(days=horizon);demands=[];problems=[]
@@ -37,7 +37,7 @@ def plan(db,horizon=14):
             s=stock(db,r['stock_id'])
             if d['channel']=='dispatch' and not at_roastery(s):
                 outside_order_allocation=True;continue
-            if eligibility(s,d['channel'],d['due_at'])[0]:
+            if eligibility(s,d['channel'],order_dispatch_at(db,d['due_at']) if d['type']=='line_id' else d['due_at'])[0]:
                 take=min(need,r['quantity_mg'])
                 if d['channel']=='dispatch':take=(take//d['unit_mg'])*d['unit_mg']
                 need-=take;covered+=take;allocations.append({'batch':s['code'],'grams':take/1000,'kind':'reserved'})
@@ -45,7 +45,8 @@ def plan(db,horizon=14):
         for s in supply:
             if need<=0:break
             if d['channel']=='dispatch' and not s.get('planned') and not at_roastery(s):continue
-            if s['coffee_id']!=d['coffee_id'] or not eligibility(s,d['channel'],d['due_at'])[0]:continue
+            at=order_dispatch_at(db,d['due_at']) if d['type']=='line_id' and not s.get('planned') else d['due_at']
+            if s['coffee_id']!=d['coffee_id'] or not eligibility(s,d['channel'],at)[0]:continue
             if s.get('package_id','bulk')!='bulk' and d['channel']=='brew':continue # opening still required; do not imply ready bulk
             if d['channel']=='dispatch' and s.get('package_id','bulk')!='bulk':
                 line=one(db,'SELECT v.package_id FROM lines l JOIN variants v ON v.id=l.variant_id WHERE l.id=?',(d['id'],))

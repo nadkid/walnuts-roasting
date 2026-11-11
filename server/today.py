@@ -2,7 +2,7 @@
 from collections import defaultdict
 from datetime import timedelta
 from .db import rows, settings
-from .domain import dt, stamp, now, stock, eligibility, order_eligible, at_roastery
+from .domain import dt, stamp, now, stock, eligibility, order_eligible, at_roastery, order_dispatch_at
 from .planner import latest_slot
 from . import coffees, blends
 
@@ -35,7 +35,7 @@ def customer_roast(db):
     for p in plans:p.update(left=p['expected_mg'],roasted_at=p['roast_at'],held=0,archived=0)
 
     def suitable(s,d):
-        return s['coffee_id']==d['coffee_id'] and s.get('package_id','bulk') in ('bulk',d['package_id']) and eligibility(s,'dispatch',max((d['due_at'],clock),key=dt))[0]
+        return s['coffee_id']==d['coffee_id'] and s.get('package_id','bulk') in ('bulk',d['package_id']) and eligibility(s,'dispatch',order_dispatch_at(db,d['due_at']))[0]
 
     # Net bulk grams can be consolidated before packing. Packed bags must match
     # the requested size. Spend stock once, by deadline, without forecast demand.

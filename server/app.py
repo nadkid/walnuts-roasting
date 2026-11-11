@@ -48,7 +48,7 @@ def state(db,user,scheduler):
             elif not l['unfulfilled']:status='Shopify fulfilled / removed'
             elif not o['due_at']:status='Needs deadline'
             elif l['excluded_allocation_mg']:status='Allocation outside roastery'
-            elif any(not eligibility(stock(db,a['stock_id']),'dispatch',o['due_at'])[0] for a in l['allocations']):status='Allocation at risk'
+            elif any(not eligibility(stock(db,a['stock_id']),'dispatch',order_dispatch_at(db,o['due_at']))[0] for a in l['allocations']):status='Allocation at risk'
             elif any(a['quantity_mg']%l['weight_mg'] for a in l['allocations']):status='Review split-bag allocations'
             elif l['missing_mg']:status='Needs allocation / roasting'
             elif any(not eligibility(stock(db,a['stock_id']),'dispatch',clock)[0] for a in l['allocations']):status='Resting'
@@ -276,7 +276,7 @@ class Handler(BaseHTTPRequestHandler):
                 if p['fresh_days']<=max(v or 0 for k,v in p.items() if k in ('brew_days','dispatch_days','retail_days')):raise ValueError('Freshness window must extend beyond rest periods.')
                 db.execute('UPDATE batches SET policy=? WHERE id=?',(json.dumps(p),b['id']))
             for r in rows(db,'SELECT r.* FROM reservations r JOIN stocks s ON s.id=r.stock_id WHERE s.batch_id=?',(b['id'],)):
-                if not eligibility(one(db,'SELECT * FROM batches WHERE id=?',(b['id'],)),r['use'],r['due_at'])[0]:issue(db,'local',r['id'],'allocation_at_risk','Batch policy/hold changed. Review and replace the affected reservation.')
+                if not eligibility(one(db,'SELECT * FROM batches WHERE id=?',(b['id'],)),r['use'],order_dispatch_at(db,r['due_at']) if r['line_id'] else r['due_at'])[0]:issue(db,'local',r['id'],'allocation_at_risk','Batch policy/hold changed. Review and replace the affected reservation.')
             audit(db,actor,'batch_policy',{'before':b,'change':d});return
         if path=='/api/order-local':
             if one(db,'SELECT source FROM orders WHERE id=?',(d['id'],))['source']=='wholesale':raise ValueError('Use Edit wholesale order to change this order and its deadline.')

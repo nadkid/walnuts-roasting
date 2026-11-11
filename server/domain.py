@@ -38,6 +38,14 @@ def eligibility(batch,use,at):
     if dt(at)>fresh: return False,stamp(ready),'Outside freshness policy'
     return dt(at)>=ready,stamp(ready),'Ready' if dt(at)>=ready else 'Resting'
 
+def order_dispatch_at(db,due_at):
+    """Late orders need stock dispatchable now, not before it was roasted.
+
+    Keep the actual deadline on the order/reservation for overdue reporting.
+    Future commitments still require readiness and freshness at that deadline.
+    """
+    return max((due_at,now(db)),key=dt)
+
 def stock(db,id):
     return one(db,"SELECT s.*,b.coffee_id,b.code,b.roasted_at,b.policy,b.held,b.archived,c.name coffee,c.profile,l.name location,COALESCE(p.name,'Bulk') form,COALESCE(p.weight_mg,0) package_mg,COALESCE((SELECT SUM(quantity_mg) FROM reservations r WHERE r.stock_id=s.id),0) reserved_mg FROM stocks s JOIN batches b ON b.id=s.batch_id LEFT JOIN coffees c ON c.id=b.coffee_id JOIN locations l ON l.id=s.location_id LEFT JOIN packages p ON p.id=s.package_id WHERE s.id=?",(id,))
 def at_roastery(scope):
@@ -153,6 +161,7 @@ def movement(db,d,actor,request_id):
     if kind in ('consume','sale','reserve','shipment'):
         use=d.get('use') or ('brew' if kind=='consume' else 'retail' if kind=='sale' else 'dispatch')
         at=d.get('due_at',now(db)) if kind=='reserve' else now(db)
+        if kind=='reserve' and d.get('line_id'):at=order_dispatch_at(db,at)
         if kind=='consume': use='brew'
         elif kind=='sale': use='retail'
         eligible,ready,why=eligibility(s,use,at)
