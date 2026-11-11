@@ -33,6 +33,21 @@ class Profit(unittest.TestCase):
     def shipping(self,**kw):
         return {'order_id':'o','version':0,'currency':'JPY','mode':'shipping','reason':'Carrier receipt','parcels':[{'carrier':'Japan Post','service':'Parcel','tracking':'TEST-123','shipped_at':'2026-11-12T01:00:00Z','cost':'500','weight_g':'250'}],**kw}
     def report(self):return profit.snapshot(self.db)['rows']
+    def test_historical_shipments_preserve_estimated_or_unknown_costs_without_inventory(self):
+        from server import shipments
+        self.shopify();before=self.report()[0]
+        self.op(shipments.reconcile,{'fulfillment_id':'f','reason':'Shipped before batch tracking'})
+        after=self.report()[0]
+        self.assertIsNone(after['bean_cost_minor']);self.assertEqual(after['cost_basis'],'missing')
+        self.assertEqual(before['net_sales_minor'],after['net_sales_minor'])
+        self.assertIn('pre-dashboard stock',after['cost_note'])
+        bean=self.bean();self.purchase(bean)
+        after=self.report()[0];self.assertIsNotNone(after['bean_cost_minor'])
+        self.assertEqual(after['cost_basis'],'estimated');self.assertIn('pre-dashboard stock',after['cost_note'])
+        self.assertEqual(rows(self.db,'SELECT * FROM fulfillment_picks'),[])
+        self.assertEqual(rows(self.db,'SELECT * FROM stocks'),[])
+        self.op(shipments.reconcile,{'fulfillment_id':'f','action':'reopen','reason':'Review shipment'})
+        self.assertNotIn('pre-dashboard stock',self.report()[0]['cost_note'])
     def test_weighted_average_measured_yield_overfill_and_no_future_price(self):
         b=self.bean();self.purchase(b,2000,2000)
         first=self.c.batch(green=1000,output=800)

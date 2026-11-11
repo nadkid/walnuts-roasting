@@ -248,6 +248,8 @@ def finish(row):
 
 def snapshot(db):
     costs=batch_costs(db);context=estimate_context(db);result=[];shipping=shipping_snapshot(db);cfg=settings(db)
+    from .shipments import active
+    historical_lines={(r['order_id'],line['line_id']) for r in active(db) for line in json.loads(r['payload'])['lines']}
     # Square retains historical receipts even before inventory cutover. Their costs
     # use labelled current-price estimates when actual batch picks are unavailable.
     mappings={r['external_id']:r for r in rows(db,"SELECT v.*,p.coffee_id,p.package_id,k.weight_mg,c.name coffee,c.profile FROM sale_catalog v LEFT JOIN sale_products p ON p.id=v.product_id LEFT JOIN packages k ON k.id=p.package_id LEFT JOIN coffees c ON c.id=p.coffee_id WHERE v.source='square'")}
@@ -337,6 +339,7 @@ def snapshot(db):
                 expected=int(money_line.get('original_units',line['quantity']))*(line['weight_mg'] or 0)
             cost,why,basis,cost_note=sale_cost(picks,costs,currency,expected,line['coffee_id'],financial['sold_at'] if financial else order['created_at'],context) if line['kind']=='coffee' else (None,'Product mapping needs review','missing','Approve the coffee mapping first.')
             if why:issues.append(why)
+            if (order['id'],line['id']) in historical_lines:cost_note='Shipped from pre-dashboard stock; actual batch history unavailable. '+cost_note
             if not fulfilled and basis!='estimated':cost=None;issues.append('Batch pick missing or changed')
             if expenses.get(line['id']) is None:issues.append('Shipping cost missing' if not entry else 'Shipping allocation or currency needs review')
             if income.get(line['id']) is None:issues.append('Shipping revenue missing')

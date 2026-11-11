@@ -13,7 +13,7 @@ from .today import customer_roast
 from .wholesale import save_order,dispatch_order
 from .auth import password_hash,login,token_hash
 from .adapters import Scheduler
-from . import green,products,square,profit,coffees,blends
+from . import green,products,square,profit,coffees,blends,shipments
 
 LIMIT=2*1024*1024
 
@@ -30,9 +30,11 @@ def state(db,user,scheduler):
         b.pop('source_json',None)
     orders=rows(db,'SELECT * FROM orders ORDER BY due_at,number')
     shipping_records=profit.shipping_snapshot(db)
+    historical_shipments=shipments.active(db)
     order_currencies={r['order_id']:r['currency'] for r in rows(db,'SELECT order_id,currency FROM order_financials')}
     for o in orders:
         o['shipping']=shipping_records.get(o['id'])
+        o['shipment_reconciliations']=[{k:v for k,v in r.items() if k not in ('payload','payload_hash','request_id')} for r in historical_shipments if r['order_id']==o['id']]
         o['currency']=order_currencies.get(o['id'],'JPY')
         o['can_record_shipping']=profit.shipping_eligible(db,o)
         o['wholesale']=one(db,'SELECT * FROM wholesale_orders WHERE order_id=?',(o['id'],)) if o['source']=='wholesale' else None
@@ -104,7 +106,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200,{'movements':rows(db,'SELECT m.*,e.delta_mg,e.delta_overfill_mg,s.location_id,s.package_id FROM entries e JOIN movements m ON m.id=e.movement_id JOIN stocks s ON s.id=e.stock_id WHERE s.batch_id=? ORDER BY m.at DESC,m.rowid DESC',(batch,)),'audit':rows(db,'SELECT * FROM audit ORDER BY id DESC LIMIT 200')})
                 if path=='/api/export':
                     if user['role']!='admin':return self.send(403,{'error':'Administrator access required.'})
-                    return self.send(200,{'exported_at':stamp(),'blend_profiles':rows(db,'SELECT * FROM blend_profiles'),'blend_recipes':rows(db,'SELECT * FROM blend_recipes'),'blend_recipe_cancellations':rows(db,'SELECT * FROM blend_recipe_cancellations'),'batch_blends':rows(db,'SELECT * FROM batch_blends'),'batch_green_components':rows(db,'SELECT * FROM batch_green_components'),'coffee_archives':rows(db,'SELECT * FROM coffee_archives'),'order_financials':rows(db,'SELECT * FROM order_financials'),'order_shipping':rows(db,'SELECT * FROM order_shipping'),'fulfillment_picks':rows(db,'SELECT * FROM fulfillment_picks'),'square_return_orders':rows(db,'SELECT * FROM square_return_orders'),'sale_products':rows(db,'SELECT * FROM sale_products'),'sale_catalog':rows(db,'SELECT * FROM sale_catalog'),'square_sales':rows(db,'SELECT * FROM square_sales'),'square_sale_picks':rows(db,'SELECT * FROM square_sale_picks'),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
+                    return self.send(200,{'exported_at':stamp(),'blend_profiles':rows(db,'SELECT * FROM blend_profiles'),'blend_recipes':rows(db,'SELECT * FROM blend_recipes'),'blend_recipe_cancellations':rows(db,'SELECT * FROM blend_recipe_cancellations'),'batch_blends':rows(db,'SELECT * FROM batch_blends'),'batch_green_components':rows(db,'SELECT * FROM batch_green_components'),'coffee_archives':rows(db,'SELECT * FROM coffee_archives'),'order_financials':rows(db,'SELECT * FROM order_financials'),'order_shipping':rows(db,'SELECT * FROM order_shipping'),'fulfillment_events':rows(db,'SELECT * FROM fulfillment_events'),'fulfillment_reconciliations':rows(db,'SELECT * FROM fulfillment_reconciliations'),'fulfillment_picks':rows(db,'SELECT * FROM fulfillment_picks'),'square_return_orders':rows(db,'SELECT * FROM square_return_orders'),'sale_products':rows(db,'SELECT * FROM sale_products'),'sale_catalog':rows(db,'SELECT * FROM sale_catalog'),'square_sales':rows(db,'SELECT * FROM square_sales'),'square_sale_picks':rows(db,'SELECT * FROM square_sale_picks'),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
                 return self.send(404,{'error':'Unknown endpoint.'})
             relative='index.html' if path=='/' else path.lstrip('/')
             f=(ROOT/'static'/relative).resolve()
@@ -161,7 +163,7 @@ class Handler(BaseHTTPRequestHandler):
             user=self.session(db)
             if not user:return self.send(401,{'error':'Session expired. Sign in again.'})
             if not secrets.compare_digest(self.headers.get('X-CSRF-Token',''),user['csrf']):return self.send(403,{'error':'Session token missing. Reload and retry.'})
-            admin=path in ('/api/settings','/api/coffee','/api/coffee-archive','/api/blend-config','/api/blend-recipe','/api/blend-recipe-cancel','/api/package','/api/location','/api/user','/api/variant','/api/bean-map','/api/csv-preview','/api/csv-commit','/api/retry-import','/api/batch-policy','/api/issue','/api/order-import','/api/sync','/api/roast-import','/api/roast-complete','/api/green-reverse','/api/product-map','/api/product-map-batch','/api/square-config','/api/square-retry','/api/square-acknowledge') or (path=='/api/move' and d.get('kind') in ('reverse','return'))
+            admin=path in ('/api/settings','/api/coffee','/api/coffee-archive','/api/blend-config','/api/blend-recipe','/api/blend-recipe-cancel','/api/package','/api/location','/api/user','/api/variant','/api/bean-map','/api/csv-preview','/api/csv-commit','/api/retry-import','/api/batch-policy','/api/issue','/api/order-import','/api/sync','/api/roast-import','/api/roast-complete','/api/green-reverse','/api/product-map','/api/product-map-batch','/api/square-config','/api/square-retry','/api/square-acknowledge','/api/fulfillment-reconcile') or (path=='/api/move' and d.get('kind') in ('reverse','return'))
             if admin and user['role']!='admin':return self.send(403,{'error':'Administrator access required.'})
             actor=user['name'];request=self.headers.get('Idempotency-Key','')
             if path=='/api/sync':
@@ -199,6 +201,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/wholesale':return save_order(db,d,actor,request)
         if path=='/api/wholesale-dispatch':return dispatch_order(db,d,actor,request)
         if path=='/api/fulfillment-pick':return fulfillment_pick(db,d,actor,request)
+        if path=='/api/fulfillment-reconcile':return shipments.reconcile(db,d,actor,request)
         if path=='/api/settings':
             allowed={'charge_mg','max_charge_mg','roast_days','roast_slots','roast_days_confirmed','buffer_days','safety_bp','channel_priority','eligible_payments','cutover_at','roastworld_start_at','poll_seconds','brand_color'}
             if not set(d)<=allowed:raise ValueError('Unknown setting.')

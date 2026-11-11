@@ -48,6 +48,8 @@ Shopify order source fields remain read-only. Cancellations/reductions release o
 
 When Shopify reports an external fulfillment, the app creates a task. Record the actual package/batch picks across all coffee fulfillment lines. It checks the exact confirmed units and deducts physical stock once, using the fulfillment ID. It never guesses provenance or sends a customer notification. If the shipment actually violated a quality/rest rule, an administrator must review an audited batch override before reconciling it; do not quietly waive the rule.
 
+For shipments already sent using **pre-dashboard stock** with no batch history, an administrator can choose **Shipped from pre-dashboard stock** beside the shipment in Orders → Confirmed shipments needing a physical pick. Confirm the individual shipment and enter a reconciliation note. This clears its reminder and linked exception, records who confirmed it and why, and leaves current inventory, reservations, sales and shipping records unchanged. No batch or physical pick is invented. Profit keeps bean costs estimated or missing as appropriate and labels the historical stock. Re-importing the same shipment keeps the reconciliation; other shipments remain pending. Open the order’s **Pre-dashboard stock** details to review the note or **Reopen stock pick** if marked incorrectly. Reopening also leaves stock untouched.
+
 ## Rest and quality
 
 Café brewing, online dispatch and retail sale have independent elapsed-day policies. Dispatch can be earlier than brew readiness only when explicitly configured. No assumed transit time is added. All display times are Asia/Tokyo; storage uses UTC offsets consistently.

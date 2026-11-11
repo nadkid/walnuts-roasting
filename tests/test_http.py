@@ -69,6 +69,34 @@ class HTTP(unittest.TestCase):
         self.assertEqual(self.request('roasted-stock',payload)[0],400)
         self.assertEqual(self.request('roasted-stock',{**payload,'reason':''},'no-reason')[0],400)
 
+    def test_historical_shipment_reconciliation_requires_admin_and_preserves_inventory(self):
+        payload={'fulfillment_id':'http-historical-shipment','reason':'Shipped from stock before launch'}
+        self.assertEqual(self.request('fulfillment-reconcile',payload,'unauthenticated-history')[0],401)
+        self.login()
+        imported={'id':'http-historical-order','name':'#HTTP-HISTORY','updatedAt':'2026-11-05T02:00:00Z','displayFinancialStatus':'PAID','displayFulfillmentStatus':'FULFILLED','lines':[{'id':'http-historical-line','title':'Historical coffee','variant':{'id':'http-historical-variant'},'quantity':2,'currentQuantity':2,'unfulfilledQuantity':0}],'fulfillments':[{'id':payload['fulfillment_id'],'createdAt':'2026-11-01T02:00:00Z','status':'SUCCESS','lines':[{'line_id':'http-historical-line','quantity':2}]}]}
+        self.assertEqual(self.request('order-import',imported)[0],200)
+        self.request('logout',{});self.login(True)
+        self.assertEqual(self.request('fulfillment-reconcile',payload,'staff-history')[0],403)
+        self.request('logout',{});self.login()
+        self.assertEqual(self.request('fulfillment-reconcile',payload,'history-no-csrf',csrf=False)[0],403)
+        self.assertEqual(self.request('fulfillment-reconcile',payload)[0],400)
+        self.assertEqual(self.request('fulfillment-reconcile',{**payload,'reason':' '},'empty-history')[0],400)
+        _,before,_=self.request('state')
+        self.assertEqual(self.request('fulfillment-reconcile',payload,'admin-history')[0],200)
+        self.assertTrue(self.request('fulfillment-reconcile',payload,'admin-history')[1]['duplicate'])
+        _,after,_=self.request('state');self.assertEqual(after['stocks'],before['stocks']);self.assertEqual(after['green'],before['green'])
+        self.assertFalse(any(f['id']==payload['fulfillment_id'] for f in after['fulfillments']))
+        order=next(o for o in after['orders'] if o['id']==imported['id'])
+        self.assertEqual(order['shipment_reconciliations'][0]['reason'],payload['reason'])
+        self.assertEqual(self.request('order-import',imported)[0],200)
+        _,after,_=self.request('state');self.assertFalse(any(f['id']==payload['fulfillment_id'] for f in after['fulfillments']))
+        _,export,_=self.request('export');self.assertTrue(any(r['fulfillment_id']==payload['fulfillment_id'] for r in export['fulfillment_reconciliations']))
+        self.assertTrue(any(f['id']==payload['fulfillment_id'] for f in export['fulfillment_events']))
+        reopen={**payload,'action':'reopen','reason':'Wrong shipment selected'}
+        self.assertEqual(self.request('fulfillment-reconcile',reopen,'reopen-history')[0],200)
+        _,after,_=self.request('state');self.assertTrue(any(f['id']==payload['fulfillment_id'] for f in after['fulfillments']))
+        self.assertEqual(after['stocks'],before['stocks'])
+
     def test_profit_read_and_shipping_are_authenticated_audited_and_csrf_protected(self):
         self.assertEqual(self.request('profit')[0],401)
         self.login(True)
