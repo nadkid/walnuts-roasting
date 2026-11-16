@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from .db import uid, rows, one, settings, transaction
+from .order_rules import order_line
 JST=ZoneInfo('Asia/Tokyo')
 
 def stamp(value=None):
@@ -151,7 +152,7 @@ def movement(db,d,actor,request_id):
     if kind=='reverse':
         if not d.get('reason'): raise ValueError('A correction reason is required.')
         original=one(db,'SELECT * FROM movements WHERE id=?',(d['reversal_of'],))
-        if original['kind'] in ('reserve','release','reverse','history','shipment','square_sale'): raise ValueError('Use an explicit audited adjustment for this operation.')
+        if original['kind'] in ('reserve','release','reverse','history','shipment','square_sale','cafe_delivery','cafe_request','cafe_cancel'): raise ValueError('Use an explicit audited adjustment for this operation.')
         es=rows(db,'SELECT stock_id,delta_mg,delta_overfill_mg FROM entries WHERE movement_id=?',(original['id'],))
         for e in es: delta(db,m,e['stock_id'],-e['delta_mg'],-e['delta_overfill_mg'])
         from .green import reverse_production
@@ -206,13 +207,13 @@ def movement(db,d,actor,request_id):
         if bool(line)==bool(demand): raise ValueError('Choose exactly one order line or café/retail requirement.')
         if line:
             if not at_roastery(s):raise ValueError('Customer orders can only reserve stock at the roastery.')
-            l=one(db,'SELECT l.*,v.coffee_id,v.package_id,v.kind,o.payment,o.cancelled,o.due_at FROM lines l JOIN orders o ON o.id=l.order_id LEFT JOIN variants v ON v.id=l.variant_id WHERE l.id=?',(line,))
+            l=order_line(db,line)
             if l['kind']!='coffee' or l['coffee_id']!=s['coffee_id'] or not order_eligible(db,l['order_id']): raise ValueError('Order is unmapped, ineligible, or for another coffee.')
-            if d.get('use','dispatch')!='dispatch' or not l['due_at'] or stamp(l['due_at'])!=due: raise ValueError('Order allocations must use its exact local dispatch deadline and dispatch policy.')
-            size=one(db,'SELECT weight_mg FROM packages WHERE id=?',(l['package_id'],))['weight_mg']
+            if d.get('use','dispatch')!=l['use'] or not l['due_at'] or stamp(l['due_at'])!=due: raise ValueError('Order allocations must use the exact deadline and '+l['use']+' rest policy.')
+            size=l['weight_mg']
             if s['package_id'] not in ('bulk',l['package_id']): raise ValueError('Package does not match the order variant.')
             existing=db.execute('SELECT COALESCE(SUM(quantity_mg),0) FROM reservations WHERE line_id=?',(line,)).fetchone()[0]
-            if existing+q>l['unfulfilled']*size: raise ValueError('Allocation exceeds remaining order demand.')
+            if existing+q>l['required_mg']: raise ValueError('Allocation exceeds remaining order demand.')
         else:
             req=one(db,'SELECT * FROM demands WHERE id=?',(demand,))
             if req['coffee_id']!=s['coffee_id'] or req['channel']!=d.get('use') or stamp(req['due_at'])!=due: raise ValueError('Requirement must match coffee and intended use.')
@@ -229,6 +230,7 @@ def movement(db,d,actor,request_id):
         r=one(db,'SELECT * FROM reservations WHERE id=?',(d['reservation_id'],))
         if r['stock_id']!=s['id'] or not r['line_id'] or s['package_id']!='bulk': raise ValueError('Select a bulk order allocation.')
         v=one(db,'SELECT v.* FROM variants v JOIN lines l ON l.variant_id=v.id WHERE l.id=?',(r['line_id'],))
+        if v['package_id'] is None:raise ValueError('Bulk cafe requests do not need packing.')
         p=one(db,'SELECT * FROM packages WHERE id=?',(v['package_id'],));q=r['quantity_mg']
         if q%p['weight_mg']: raise ValueError('Allocation must cover whole bags; replace this allocation first.')
         db.execute('DELETE FROM reservations WHERE id=?',(r['id'],));delta(db,m,s['id'],-q)
@@ -256,6 +258,7 @@ def link_completed_plan(db,d,actor,request_id):
 def order_eligible(db,order_id):
     o=one(db,'SELECT * FROM orders WHERE id=?',(order_id,))
     if o['cancelled']:return False
+    if o['source']=='cafe':return bool(db.execute('SELECT 1 FROM cafe_orders WHERE order_id=?',(order_id,)).fetchone())
     if o['source']=='wholesale':
         return one(db,'SELECT status FROM wholesale_orders WHERE order_id=?',(order_id,))['status']=='CONFIRMED'
     return o['payment'] in settings(db)['eligible_payments']

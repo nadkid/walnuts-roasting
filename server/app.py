@@ -13,7 +13,8 @@ from .today import customer_roast
 from .wholesale import save_order,dispatch_order
 from .auth import password_hash,login,token_hash
 from .adapters import Scheduler
-from . import green,products,square,profit,coffees,blends,shipments
+from . import green,products,square,profit,coffees,blends,shipments,cafe
+from .order_rules import order_lines
 
 LIMIT=2*1024*1024
 
@@ -37,23 +38,25 @@ def state(db,user,scheduler):
         o['shipment_reconciliations']=[{k:v for k,v in r.items() if k not in ('payload','payload_hash','request_id')} for r in historical_shipments if r['order_id']==o['id']]
         o['currency']=order_currencies.get(o['id'],'JPY')
         o['can_record_shipping']=profit.shipping_eligible(db,o)
+        o['cafe']=one(db,'SELECT * FROM cafe_orders WHERE order_id=?',(o['id'],)) if o['source']=='cafe' else None
         o['wholesale']=one(db,'SELECT * FROM wholesale_orders WHERE order_id=?',(o['id'],)) if o['source']=='wholesale' else None
         if o['wholesale']:o['wholesale']['customer']=json.loads(o['wholesale'].pop('customer_json'))
-        o['lines']=rows(db,'SELECT l.*,v.kind,v.coffee_id,v.package_id,p.weight_mg FROM lines l LEFT JOIN variants v ON v.id=l.variant_id LEFT JOIN packages p ON p.id=v.package_id WHERE l.order_id=?',(o['id'],))
+        o['lines']=order_lines(db,o['id'])
         for l in o['lines']:
             l['allocations']=rows(db,'SELECT r.*,b.code,s.package_id,s.location_id,loc.name location FROM reservations r JOIN stocks s ON s.id=r.stock_id JOIN batches b ON b.id=s.batch_id JOIN locations loc ON loc.id=s.location_id WHERE line_id=?',(l['id'],))
-            l['required_mg']=l['unfulfilled']*(l['weight_mg'] or 0);l['excluded_allocation_mg']=sum(a['quantity_mg'] for a in l['allocations'] if not at_roastery(a));l['allocated_mg']=sum(a['quantity_mg'] for a in l['allocations'] if at_roastery(a));l['missing_mg']=max(0,l['required_mg']-l['allocated_mg'])
+            l['excluded_allocation_mg']=sum(a['quantity_mg'] for a in l['allocations'] if not at_roastery(a));l['allocated_mg']=sum(a['quantity_mg'] for a in l['allocations'] if at_roastery(a));l['missing_mg']=max(0,l['required_mg']-l['allocated_mg'])
             if l['kind']=='noncoffee':status='Non-coffee'
             elif o['cancelled']:status='Cancelled'
             elif l['kind']!='coffee':status='Needs mapping'
             elif not order_eligible(db,o['id']):status='Wholesale draft' if o['source']=='wholesale' else 'Awaiting payment'
-            elif not l['unfulfilled']:status='Shopify fulfilled / removed'
+            elif not l['unfulfilled']:status='Delivered to café' if o['source']=='cafe' else 'Shopify fulfilled / removed'
             elif not o['due_at']:status='Needs deadline'
             elif l['excluded_allocation_mg']:status='Allocation outside roastery'
-            elif any(not eligibility(stock(db,a['stock_id']),'dispatch',order_dispatch_at(db,o['due_at']))[0] for a in l['allocations']):status='Allocation at risk'
+            elif any(not eligibility(stock(db,a['stock_id']),l['use'],order_dispatch_at(db,o['due_at']))[0] for a in l['allocations']):status='Allocation at risk'
             elif any(a['quantity_mg']%l['weight_mg'] for a in l['allocations']):status='Review split-bag allocations'
             elif l['missing_mg']:status='Needs allocation / roasting'
-            elif any(not eligibility(stock(db,a['stock_id']),'dispatch',clock)[0] for a in l['allocations']):status='Resting'
+            elif any(not eligibility(stock(db,a['stock_id']),l['use'],clock)[0] for a in l['allocations']):status='Resting'
+            elif o['source']=='cafe' and (l['request_form']=='bulk' or all(a['package_id']!='bulk' for a in l['allocations'])):status='Ready to transfer'
             elif any(a['package_id']=='bulk' for a in l['allocations']):status='Ready to pack'
             else:status='Packed / allocated'
             l['status']=status
@@ -106,7 +109,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200,{'movements':rows(db,'SELECT m.*,e.delta_mg,e.delta_overfill_mg,s.location_id,s.package_id FROM entries e JOIN movements m ON m.id=e.movement_id JOIN stocks s ON s.id=e.stock_id WHERE s.batch_id=? ORDER BY m.at DESC,m.rowid DESC',(batch,)),'audit':rows(db,'SELECT * FROM audit ORDER BY id DESC LIMIT 200')})
                 if path=='/api/export':
                     if user['role']!='admin':return self.send(403,{'error':'Administrator access required.'})
-                    return self.send(200,{'exported_at':stamp(),'blend_profiles':rows(db,'SELECT * FROM blend_profiles'),'blend_recipes':rows(db,'SELECT * FROM blend_recipes'),'blend_recipe_cancellations':rows(db,'SELECT * FROM blend_recipe_cancellations'),'batch_blends':rows(db,'SELECT * FROM batch_blends'),'batch_green_components':rows(db,'SELECT * FROM batch_green_components'),'coffee_archives':rows(db,'SELECT * FROM coffee_archives'),'order_financials':rows(db,'SELECT * FROM order_financials'),'order_shipping':rows(db,'SELECT * FROM order_shipping'),'fulfillment_events':rows(db,'SELECT * FROM fulfillment_events'),'fulfillment_reconciliations':rows(db,'SELECT * FROM fulfillment_reconciliations'),'fulfillment_picks':rows(db,'SELECT * FROM fulfillment_picks'),'square_return_orders':rows(db,'SELECT * FROM square_return_orders'),'sale_products':rows(db,'SELECT * FROM sale_products'),'sale_catalog':rows(db,'SELECT * FROM sale_catalog'),'square_sales':rows(db,'SELECT * FROM square_sales'),'square_sale_picks':rows(db,'SELECT * FROM square_sale_picks'),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
+                    return self.send(200,{'exported_at':stamp(),'blend_profiles':rows(db,'SELECT * FROM blend_profiles'),'blend_recipes':rows(db,'SELECT * FROM blend_recipes'),'blend_recipe_cancellations':rows(db,'SELECT * FROM blend_recipe_cancellations'),'batch_blends':rows(db,'SELECT * FROM batch_blends'),'batch_green_components':rows(db,'SELECT * FROM batch_green_components'),'coffee_archives':rows(db,'SELECT * FROM coffee_archives'),'order_financials':rows(db,'SELECT * FROM order_financials'),'order_shipping':rows(db,'SELECT * FROM order_shipping'),'cafe_orders':rows(db,'SELECT * FROM cafe_orders'),'cafe_order_lines':rows(db,'SELECT * FROM cafe_order_lines'),'cafe_deliveries':rows(db,'SELECT * FROM cafe_deliveries'),'fulfillment_events':rows(db,'SELECT * FROM fulfillment_events'),'fulfillment_reconciliations':rows(db,'SELECT * FROM fulfillment_reconciliations'),'fulfillment_picks':rows(db,'SELECT * FROM fulfillment_picks'),'square_return_orders':rows(db,'SELECT * FROM square_return_orders'),'sale_products':rows(db,'SELECT * FROM sale_products'),'sale_catalog':rows(db,'SELECT * FROM sale_catalog'),'square_sales':rows(db,'SELECT * FROM square_sales'),'square_sale_picks':rows(db,'SELECT * FROM square_sale_picks'),'green_beans':rows(db,'SELECT * FROM green_beans'),'green_coffee_links':rows(db,'SELECT * FROM green_coffee_links'),'green_events':rows(db,'SELECT * FROM green_events'),'stocks':rows(db,'SELECT * FROM stocks'),'batches':rows(db,'SELECT * FROM batches'),'movements':rows(db,'SELECT * FROM movements'),'entries':rows(db,'SELECT * FROM entries'),'reservations':rows(db,'SELECT * FROM reservations'),'audit':rows(db,'SELECT * FROM audit')})
                 return self.send(404,{'error':'Unknown endpoint.'})
             relative='index.html' if path=='/' else path.lstrip('/')
             f=(ROOT/'static'/relative).resolve()
@@ -196,6 +199,9 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/green-reverse':return green.reverse(db,d,actor,request)
         if path=='/api/batch':return create_batch(db,d,actor,request)
         if path=='/api/roasted-stock':return add_roasted_stock(db,d,actor,request)
+        if path=='/api/cafe-order':return cafe.save_order(db,d,actor,request)
+        if path=='/api/cafe-cancel':return cafe.cancel_order(db,d,actor,request)
+        if path=='/api/cafe-delivery':return cafe.deliver(db,d,actor,request)
         if path=='/api/move':return movement(db,d,actor,request)
         if path=='/api/link-plan':return link_completed_plan(db,d,actor,request)
         if path=='/api/wholesale':return save_order(db,d,actor,request)
@@ -219,7 +225,7 @@ class Handler(BaseHTTPRequestHandler):
             for k,v in d.items():db.execute('UPDATE settings SET value=? WHERE key=?',(json.dumps(v),k))
             if 'eligible_payments' in d:
                 for l in rows(db,'SELECT l.id,o.payment,o.cancelled,o.source FROM lines l JOIN orders o ON o.id=l.order_id'):
-                    if l['source']!='wholesale' and (l['cancelled'] or l['payment'] not in d['eligible_payments']):release_excess(db,l['id'],0,actor)
+                    if l['source'] not in ('wholesale','cafe') and (l['cancelled'] or l['payment'] not in d['eligible_payments']):release_excess(db,l['id'],0,actor)
             audit(db,actor,'settings',d);return
         if path=='/api/blend-config':return blends.save_profile(db,d,actor,request)
         if path=='/api/blend-recipe':return blends.save_recipe(db,d,actor,request)
@@ -242,6 +248,7 @@ class Handler(BaseHTTPRequestHandler):
             audit(db,actor,'user_access',{'name':d.get('name'),'id':d.get('id'),'role':d['role']});return
         if path=='/api/variant':
             v=one(db,'SELECT * FROM variants WHERE id=?',(d['id'],))
+            if v['id'].startswith('cafe:'):raise ValueError('Cafe request coffees are managed through Edit request.')
             if db.execute('SELECT 1 FROM reservations r JOIN lines l ON l.id=r.line_id WHERE l.variant_id=?',(v['id'],)).fetchone():raise ValueError('Release current allocations before changing the variant mapping.')
             kind=d['kind'];c=d.get('coffee_id') if kind=='coffee' else None;p=d.get('package_id') if kind=='coffee' else None
             if kind=='coffee' and (not c or not p):raise ValueError('Choose a coffee and net package size.')
@@ -282,7 +289,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not eligibility(one(db,'SELECT * FROM batches WHERE id=?',(b['id'],)),r['use'],order_dispatch_at(db,r['due_at']) if r['line_id'] else r['due_at'])[0]:issue(db,'local',r['id'],'allocation_at_risk','Batch policy/hold changed. Review and replace the affected reservation.')
             audit(db,actor,'batch_policy',{'before':b,'change':d});return
         if path=='/api/order-local':
-            if one(db,'SELECT source FROM orders WHERE id=?',(d['id'],))['source']=='wholesale':raise ValueError('Use Edit wholesale order to change this order and its deadline.')
+            if one(db,'SELECT source FROM orders WHERE id=?',(d['id'],))['source'] in ('wholesale','cafe'):raise ValueError('Use the order’s Edit action to change this request and its deadline.')
             db.execute('UPDATE orders SET due_at=?,notes=? WHERE id=?',(stamp(d['due_at']) if d.get('due_at') else None,d.get('notes',''),d['id']));audit(db,actor,'order_deadline',d);return
         if path=='/api/demand':
             if d.get('delete'):

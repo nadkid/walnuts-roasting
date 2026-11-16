@@ -2,15 +2,16 @@ from datetime import timedelta
 from decimal import Decimal
 import json, math
 from .db import rows, one, settings
+from .order_rules import order_lines
 from .domain import dt, stamp, now, JST, eligibility, stock, order_eligible, at_roastery, order_dispatch_at
 
 def plan(db,horizon=14):
     cfg=settings(db);clock=dt(now(db));end=clock+timedelta(days=horizon);demands=[];problems=[]
-    for l in rows(db,"SELECT l.*,o.due_at,o.number,o.payment,o.cancelled,v.kind,v.coffee_id,p.weight_mg FROM lines l JOIN orders o ON o.id=l.order_id LEFT JOIN variants v ON v.id=l.variant_id LEFT JOIN packages p ON p.id=v.package_id WHERE l.unfulfilled>0"):
+    for l in order_lines(db,open_only=True):
         if not order_eligible(db,l['order_id']) or l['kind']=='noncoffee':continue
         if l['kind']!='coffee':problems.append(l['number']+': variant mapping required');continue
         if not l['due_at']:problems.append(l['number']+': target dispatch / pickup date required');continue
-        demands.append({'id':l['id'],'coffee_id':l['coffee_id'],'channel':'dispatch','due_at':l['due_at'],'quantity_mg':l['unfulfilled']*l['weight_mg'],'label':l['number'],'type':'line_id','unit_mg':l['weight_mg']})
+        demands.append({'id':l['id'],'coffee_id':l['coffee_id'],'channel':l['use'],'source':l['source'],'package_id':l['package_id'],'due_at':l['due_at'],'quantity_mg':l['required_mg'],'label':l['number'],'type':'line_id','unit_mg':l['weight_mg']})
     for d in rows(db,'SELECT d.* FROM demands d WHERE NOT EXISTS(SELECT 1 FROM coffee_archives a WHERE a.coffee_id=d.coffee_id)'):
         demands.append({**d,'label':d['note'] or ('Café forecast' if d['channel']=='brew' else 'Retail target'),'type':'demand_id'})
     order=cfg['channel_priority'];demands.sort(key=lambda d:(d['due_at'],order.index(d['channel'])))
@@ -24,7 +25,7 @@ def plan(db,horizon=14):
     for d in demands:
         if dt(d['due_at'])>end:continue
         coffee=one(db,'SELECT * FROM coffees WHERE id=?',(d['coffee_id'],));need=d['quantity_mg'];covered=0;allocations=[]
-        if d['channel']=='retail':
+        if d['channel']=='retail' and d['type']=='demand_id':
             retained=[]
             for held in retail_holds.get(d['coffee_id'],[]):
                 if eligibility(held['stock'],'retail',d['due_at'])[0]:
@@ -35,29 +36,27 @@ def plan(db,horizon=14):
         # Customer orders can use only physical stock at the roastery.
         for r in rows(db,'SELECT * FROM reservations WHERE '+d['type']+'=?',(d['id'],)):
             s=stock(db,r['stock_id'])
-            if d['channel']=='dispatch' and not at_roastery(s):
+            if d['type']=='line_id' and not at_roastery(s):
                 outside_order_allocation=True;continue
             if eligibility(s,d['channel'],order_dispatch_at(db,d['due_at']) if d['type']=='line_id' else d['due_at'])[0]:
                 take=min(need,r['quantity_mg'])
-                if d['channel']=='dispatch':take=(take//d['unit_mg'])*d['unit_mg']
+                if d['type']=='line_id':take=(take//d['unit_mg'])*d['unit_mg']
                 need-=take;covered+=take;allocations.append({'batch':s['code'],'grams':take/1000,'kind':'reserved'})
-                if d['channel']=='retail' and take:retail_holds[d['coffee_id']].append({'stock':s,'qty':take})
+                if d['channel']=='retail' and d['type']=='demand_id' and take:retail_holds[d['coffee_id']].append({'stock':s,'qty':take})
         for s in supply:
             if need<=0:break
-            if d['channel']=='dispatch' and not s.get('planned') and not at_roastery(s):continue
+            if d['type']=='line_id' and not s.get('planned') and not at_roastery(s):continue
             at=order_dispatch_at(db,d['due_at']) if d['type']=='line_id' and not s.get('planned') else d['due_at']
             if s['coffee_id']!=d['coffee_id'] or not eligibility(s,d['channel'],at)[0]:continue
             if s.get('package_id','bulk')!='bulk' and d['channel']=='brew':continue # opening still required; do not imply ready bulk
-            if d['channel']=='dispatch' and s.get('package_id','bulk')!='bulk':
-                line=one(db,'SELECT v.package_id FROM lines l JOIN variants v ON v.id=l.variant_id WHERE l.id=?',(d['id'],))
-                if s['package_id']!=line['package_id']:continue
+            if d['type']=='line_id' and s.get('package_id','bulk') not in ('bulk',d['package_id']):continue
             take=min(need,s['left'])
-            if d['channel']=='dispatch':take=(take//d['unit_mg'])*d['unit_mg']
+            if d['type']=='line_id':take=(take//d['unit_mg'])*d['unit_mg']
             elif s.get('package_mg'):
                 take=(take//s['package_mg'])*s['package_mg']
             s['left']-=take;need-=take;covered+=take
             if take:allocations.append({'batch':s['code'],'grams':take/1000,'kind':'planned' if s.get('planned') else 'physical'})
-            if d['channel']=='retail' and take:retail_holds[d['coffee_id']].append({'stock':s,'qty':take})
+            if d['channel']=='retail' and d['type']=='demand_id' and take:retail_holds[d['coffee_id']].append({'stock':s,'qty':take})
         rest=coffee[d['channel']+'_days'];deadline=None;warning=[];charges=[];green=0;excess=0
         history=one(db,'SELECT COALESCE(SUM(output_mg),0) o,COALESCE(SUM(green_mg),0) g FROM batches WHERE coffee_id=? AND output_mg>0 AND green_mg>output_mg',(coffee['id'],))
         yield_bp=history['o']*10000//history['g'] if history['g'] else coffee['yield_bp'];yield_source='measured history' if history['g'] else 'configured estimate'
@@ -83,7 +82,7 @@ def plan(db,horizon=14):
                     chosen=latest_slot(limit,cfg,used_slots);key=stamp(chosen);schedule.append(key);used_slots.add(key)
                 deadline=schedule[0]
                 if any(dt(t)<clock for t in schedule) and not any('passed' in w for w in warning):warning.append('Deadline at risk: required roast slots have passed')
-            if d['channel']=='retail' and deadline:
+            if d['channel']=='retail' and d['type']=='demand_id' and deadline:
                 retail_holds[d['coffee_id']].append({'stock':{'roasted_at':deadline,'held':0,'archived':0,'policy':json.dumps({k:coffee[k] for k in ('brew_days','dispatch_days','retail_days','fresh_days')}),'code':'Earlier wall roast suggestion'},'qty':need})
             # Suggested future supply is spent once; its rounding excess can cover subsequent demand.
             if deadline and excess>0:

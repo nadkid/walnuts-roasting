@@ -32,7 +32,7 @@ def upsert(db,source,item):
 def seed_shopify(db):
     for c in rows(db,'SELECT id FROM coffees'):
         for p in rows(db,'SELECT id FROM packages'):product(db,c['id'],p['id'])
-    for v in rows(db,"SELECT v.*,COALESCE((SELECT title FROM lines WHERE variant_id=v.id LIMIT 1),v.sku) name FROM variants v WHERE v.id NOT LIKE 'wholesale:%'"):
+    for v in rows(db,"SELECT v.*,COALESCE((SELECT title FROM lines WHERE variant_id=v.id LIMIT 1),v.sku) name FROM variants v WHERE v.id NOT LIKE 'wholesale:%' AND v.id NOT LIKE 'cafe:%'"):
         if not db.execute("SELECT 1 FROM sale_catalog WHERE source='shopify' AND external_id=?",(v['id'],)).fetchone():upsert(db,'shopify',v)
         pid=product(db,v['coffee_id'],v['package_id']) if v['kind']=='coffee' and v['coffee_id'] and v['package_id'] else None
         db.execute("UPDATE sale_catalog SET kind=?,product_id=?,version=version+1 WHERE source='shopify' AND external_id=? AND (kind!=? OR product_id IS NOT ?)",(v['kind'],pid,v['id'],v['kind'],pid))

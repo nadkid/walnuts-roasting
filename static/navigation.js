@@ -1,4 +1,4 @@
-export const mainPages=['today','stock','green','batches','orders','profit','plan','settings'];
+export const mainPages=['today','cafe','stock','green','batches','orders','profit','plan','settings'];
 export const settingsTabs={coffees:'Coffees',products:'Products & POS',mappings:'Mappings',planning:'Planning',connections:'Connections',exceptions:'Exceptions',access:'Access',data:'Data'};
 
 export function routeForHash(hash,currentTab='coffees'){

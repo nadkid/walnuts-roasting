@@ -18,6 +18,7 @@ globalThis.document={querySelectorAll:()=>[tile],querySelector:s=>s==='[data-clo
 bindCoffeeRoast(S,h);tile.onclick();
 assert(html.includes('aria-expanded="true"'));assert(html.includes('#1234'));assert(html.includes('10 × 150 g'));assert(html.includes('Approx. green charge'));assert(html.includes('Gisha 1350 g'));
 h.draw();assert(html.includes('aria-expanded="true"'),'refresh retains the expanded coffee');
+coffee.orders.push({id:'cafe',number:'CF-TEST',source:'cafe',due_at:coffee.due_at,roast_mg:4000000,quantities:[{form:'bulk',remaining_mg:4000000,units:1,unit_mg:1}]});h.draw();assert(html.includes('Café request'));assert(html.includes('4000 g bulk'));assert(!html.includes('1 × 0.001 g'));coffee.orders.pop();
 bindCoffeeRoast(S,h);close.click();assert(!html.includes('#1234'));
 const malicious=structuredClone(S);malicious.customer_roast.coffees[0].name='<img src=x>';malicious.customer_roast.coffees[0].coffee_id='" onclick="bad()';
 assert(!coffeeRoastPanel(malicious,h).includes('<img src=x>'));assert(!coffeeRoastPanel(malicious,h).includes('" onclick="bad()'));

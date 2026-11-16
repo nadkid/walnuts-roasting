@@ -97,6 +97,31 @@ class HTTP(unittest.TestCase):
         _,after,_=self.request('state');self.assertTrue(any(f['id']==payload['fulfillment_id'] for f in after['fulfillments']))
         self.assertEqual(after['stocks'],before['stocks'])
 
+    def test_staff_cafe_request_and_delivery_conserve_stock_without_creating_a_sale(self):
+        payload={'due_at':'2026-11-07T03:00:00Z','lines':[{'coffee_id':'c2','form':'bulk','kg':'0.2'},{'coffee_id':'c2','form':'bags','package_id':'p100','quantity':'3'}]}
+        self.assertEqual(self.request('cafe-order',payload,'cafe-unauth')[0],401)
+        self.login(True)
+        self.assertEqual(self.request('cafe-order',payload,'cafe-no-csrf',csrf=False)[0],403)
+        self.assertEqual(self.request('cafe-order',payload)[0],400)
+        status,result,_=self.request('cafe-order',payload,'http-cafe-order');self.assertEqual(status,200,result)
+        self.assertTrue(self.request('cafe-order',payload,'http-cafe-order')[1]['duplicate'])
+        id=result['order_id'];_,s,_=self.request('state');o=next(o for o in s['orders'] if o['id']==id)
+        self.assertEqual([l['required_mg'] for l in o['lines']],[200000,300000]);self.assertIsNotNone(o['cafe'])
+        self.assertTrue(any(r['source']=='cafe' for r in s['planner']['rows']))
+        status,b,_=self.request('batch',{'coffee_id':'c2','green_g':'1000','output_g':'850','roasted_at':'2026-10-20T01:00:00Z','code':'HTTP-CAFE-BATCH'},'http-cafe-batch');self.assertEqual(status,200,b)
+        _,s,_=self.request('state');bulk=next(x for x in s['stocks'] if x['batch_id']==b['batch_id'] and x['package_id']=='bulk')
+        self.assertEqual(self.request('move',{'kind':'pack','stock_id':bulk['id'],'package_id':'p100','units':'3','location_id':'roastery'},'http-cafe-pack')[0],200)
+        _,before,_=self.request('state');packed=next(x for x in before['stocks'] if x['batch_id']==b['batch_id'] and x['package_id']=='p100')
+        delivery={'order_id':id,'version':1,'picks':[{'line_id':o['lines'][0]['id'],'stock_id':bulk['id'],'grams':200},{'line_id':o['lines'][1]['id'],'stock_id':packed['id'],'grams':300}]}
+        status,result,_=self.request('cafe-delivery',delivery,'http-cafe-delivery');self.assertEqual(status,200,result)
+        self.assertTrue(self.request('cafe-delivery',delivery,'http-cafe-delivery')[1]['duplicate'])
+        _,after,_=self.request('state');o=next(o for o in after['orders'] if o['id']==id)
+        self.assertEqual(o['fulfillment'],'FULFILLED');self.assertTrue(all(l['required_mg']==0 for l in o['lines']))
+        self.assertEqual(sum(x['quantity_mg']+x['overfill_mg'] for x in after['stocks']),sum(x['quantity_mg']+x['overfill_mg'] for x in before['stocks']))
+        self.assertTrue(any(x['batch_id']==b['batch_id'] and x['location_id']=='cafe' and x['quantity_mg']==200000 for x in after['stocks']))
+        self.assertTrue(any(x['batch_id']==b['batch_id'] and x['location_id']=='wall' and x['quantity_mg']==300000 for x in after['stocks']))
+        self.assertFalse(any(f['order_id']==id for f in after['fulfillments']))
+
     def test_profit_read_and_shipping_are_authenticated_audited_and_csrf_protected(self):
         self.assertEqual(self.request('profit')[0],401)
         self.login(True)

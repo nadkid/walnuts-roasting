@@ -35,7 +35,7 @@ const html=todayPage(S,h);
 assert.equal((html.match(/class="low-stock"/g)||[]).length,2,'only below 5 kg is red, including zero');
 assert(html.indexOf('Coffee to roast')<html.indexOf('Bean overview'));
 assert(!html.includes('Upcoming deadlines')&&!html.includes('Production priorities'));
-assert(html.indexOf('Bean overview')<html.indexOf('Café stock'));
+assert(!html.includes('Café stock')&&!html.includes('Retail stock'),'floor cards move to Cafe stock');
 assert(!html.includes('Connections & exceptions'));
 assert(html.includes('Green bean not linked'));
 const malicious=structuredClone(S);
@@ -45,7 +45,7 @@ const safe=todayPage(malicious,h);
 assert(!safe.includes('<img src=x'));
 assert(!safe.includes('<script>bad()'));
 const blank=todayPage({clock,orders:[],planner:{rows:[]},stocks:[],coffees:[],green:{beans:[]}},h);
-assert(blank.includes('Coffee to roast')&&blank.includes('No beans yet')&&blank.includes('No café stock')&&blank.includes('No retail stock'));
+assert(blank.includes('Coffee to roast')&&blank.includes('No beans yet')&&!blank.includes('No café stock')&&!blank.includes('No retail stock'));
 console.log('Today view: shared beans, stock policies, threshold, empty states and escaping passed.');
 
 const deleted=structuredClone(S);deleted.coffees.push({id:'deleted',name:'Deleted unlinked coffee',profile:'Filter',archived:1});

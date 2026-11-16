@@ -36,7 +36,7 @@ export function orderHealth(order,S){
       }
       return attention(row?.warnings?.[0]||'Allocate stock or schedule production for the remaining coffee.');
     }
-    if(!['Packed / allocated','Ready to pack','Resting'].includes(line.status))return attention(line.status||'Review the missing order information.');
+    if(!['Packed / allocated','Ready to pack','Ready to transfer','Resting'].includes(line.status))return attention(line.status||'Review the missing order information.');
   }
   return health('green','On track','Stock or scheduled production covers this commitment.');
 }

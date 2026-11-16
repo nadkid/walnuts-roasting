@@ -1,9 +1,10 @@
-"""Read-only customer-order work list. Never reserve stock or create roast plans."""
+"""Read-only customer and cafe order work list. Never reserve stock or create roast plans."""
 from collections import defaultdict
 from datetime import timedelta
 from .db import rows, settings
 from .domain import dt, stamp, now, stock, eligibility, order_eligible, at_roastery, order_dispatch_at
 from .planner import latest_slot
+from .order_rules import order_lines
 from . import coffees, blends
 
 
@@ -13,9 +14,7 @@ def customer_roast(db):
     orders={o['id']:o for o in rows(db,'SELECT * FROM orders')
             if not o['cancelled'] and not o['closed_at'] and o['fulfillment']!='FULFILLED'
             and order_eligible(db,o['id'])}
-    lines=rows(db,'''SELECT l.*,v.kind,v.coffee_id,v.package_id,p.weight_mg
-        FROM lines l LEFT JOIN variants v ON v.id=l.variant_id
-        LEFT JOIN packages p ON p.id=v.package_id WHERE l.unfulfilled>0''')
+    lines=order_lines(db,open_only=True)
     demands=[];unmapped=set()
     for line in lines:
         if line['order_id'] not in orders or line['kind']=='noncoffee':continue
@@ -23,7 +22,7 @@ def customer_roast(db):
             unmapped.add(line['order_id']);continue
         o=orders[line['order_id']]
         demands.append({**line,'number':o['number'],'source':o['source'],'due_at':o['due_at'],
-                        'required_mg':line['unfulfilled']*line['weight_mg'],
+                        'required_mg':line['required_mg'],
                         'stock_mg':0,'scheduled_mg':0,'roast_mg':None,'roast_by':None,'notes':[]})
     demands.sort(key=lambda d:(dt(d['due_at']) if d['due_at'] else dt('9999-01-01T00:00:00Z'),d['number'],d['id']))
     supply={r['id']:stock(db,r['id']) for r in rows(db,"SELECT id FROM stocks WHERE quantity_mg>0 AND location_id='roastery'")}
@@ -35,7 +34,7 @@ def customer_roast(db):
     for p in plans:p.update(left=p['expected_mg'],roasted_at=p['roast_at'],held=0,archived=0)
 
     def suitable(s,d):
-        return s['coffee_id']==d['coffee_id'] and s.get('package_id','bulk') in ('bulk',d['package_id']) and eligibility(s,'dispatch',order_dispatch_at(db,d['due_at']))[0]
+        return s['coffee_id']==d['coffee_id'] and s.get('package_id','bulk') in ('bulk',d['package_id']) and eligibility(s,d['use'],order_dispatch_at(db,d['due_at']))[0]
 
     # Net bulk grams can be consolidated before packing. Packed bags must match
     # the requested size. Spend stock once, by deadline, without forecast demand.
@@ -62,8 +61,8 @@ def customer_roast(db):
         d['stock_mg']=d['required_mg']-need;d['roast_mg']=need
         if not need:continue
         coffee=profiles[d['coffee_id']]
-        if coffee['dispatch_days'] is None:d['notes'].append('Set the dispatch rest policy.');continue
-        limit=dt(d['due_at'])-timedelta(days=coffee['dispatch_days']+cfg['buffer_days'])
+        if coffee[d['use']+'_days'] is None:d['notes'].append('Set the '+d['use']+' rest policy.');continue
+        limit=dt(d['due_at'])-timedelta(days=coffee[d['use']+'_days']+cfg['buffer_days'])
         try:d['roast_by']=stamp(latest_slot(limit,cfg,set()))
         except ValueError:d['notes'].append('Set the roasting days and start times.')
 
@@ -120,7 +119,7 @@ def customer_roast(db):
                 'due_at':first['due_at'],'required_mg':sum(d['required_mg'] for d in ls),
                 'stock_mg':sum(d['stock_mg'] for d in ls),'roast_mg':None if any(d['roast_mg'] is None for d in ls) else sum(d['roast_mg'] for d in ls),
                 'scheduled_mg':sum(d['scheduled_mg'] for d in ls),
-                'quantities':[{'units':d['unfulfilled'],'unit_mg':d['weight_mg']} for d in ls]})
+                'quantities':[{'units':d['unfulfilled'],'unit_mg':d['weight_mg'], 'form':d['request_form'],'remaining_mg':d['required_mg']} for d in ls]})
         tiles.append({'coffee_id':c['id'],'name':c['name'],'profile':c['profile'],
             'roast_mg':roast,'scheduled_mg':scheduled,'unplanned_mg':roast-scheduled,
             'unknown_lines':unknown,'roast_by':roast_by,'due_at':due,'tone':tone,'status':label,

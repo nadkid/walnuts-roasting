@@ -158,3 +158,20 @@ button.coffee-order-link{border:0;padding:0;background:none;color:#334c3d;font-s
  .coffee-roast-review{padding:13px 16px}
 }
 @media(prefers-reduced-motion:reduce){button.coffee-roast-tile{transition:none}button.coffee-roast-tile:hover{transform:none}}
+
+/* Cafe requests keep the stock cards quiet and the editable fields wide. */
+.cafe-request{margin:0 22px 18px}.cafe-request-body{padding:8px 20px 18px}
+.cafe-request-line{display:flex;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid var(--line)}
+.cafe-request-line small{display:block;color:var(--muted);font-size:11px;margin-top:5px}.cafe-request-line strong{white-space:nowrap;font-weight:500}
+.cafe-request-body>.actions{margin-top:16px;justify-content:flex-end;flex-wrap:wrap}
+.cafe-editor{width:900px}.cafe-editor .modal-body{grid-template-columns:minmax(0,1fr)}
+.cafe-editor .modal-body>*{min-width:0;grid-column:1/-1}
+.cafe-line{border:1px solid var(--line);border-radius:6px;padding:20px;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;margin:0 0 16px;background:#fafbf7;min-width:0}
+.cafe-line-heading{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.cafe-line-heading h3{margin:0;font-size:12px;font-weight:500}.cafe-line>small{grid-column:1/-1}
+.cafe-line label{min-width:0}.cafe-line select,.cafe-line input{width:100%;min-width:0;min-height:42px}
+.cafe-bulk-fields,.cafe-bag-fields{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.cafe-line [hidden]{display:none!important}
+.cafe-pick-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;padding:18px 0;border-bottom:1px solid var(--line)}
+.cafe-pick-row h3{grid-column:1/-1;font-size:13px;margin:0}.cafe-pick-row label{min-width:0}
+@media(max-width:600px){.cafe-line,.cafe-bag-fields,.cafe-bulk-fields,.cafe-pick-row{grid-template-columns:minmax(0,1fr)}.cafe-line{padding:15px}.cafe-request{margin:0 13px 15px}.cafe-request-body{padding:8px 14px 16px}.cafe-request-line{gap:12px}.cafe-request-line strong{font-size:13px}}
