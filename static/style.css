@@ -175,3 +175,10 @@ button.coffee-order-link{border:0;padding:0;background:none;color:#334c3d;font-s
 .cafe-pick-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;padding:18px 0;border-bottom:1px solid var(--line)}
 .cafe-pick-row h3{grid-column:1/-1;font-size:13px;margin:0}.cafe-pick-row label{min-width:0}
 @media(max-width:600px){.cafe-line,.cafe-bag-fields,.cafe-bulk-fields,.cafe-pick-row{grid-template-columns:minmax(0,1fr)}.cafe-line{padding:15px}.cafe-request{margin:0 13px 15px}.cafe-request-body{padding:8px 14px 16px}.cafe-request-line{gap:12px}.cafe-request-line strong{font-size:13px}}
+
+.profit-stat>span{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.profit-stat small{line-height:1.7}
+.profit-partial{font-size:9px;line-height:1.5;font-style:normal;font-weight:500;color:#8a6429;background:#fff5df;border:1px solid #eddfbf;border-radius:4px;padding:2px 6px}
+.profit-trend-line.partial{stroke-dasharray:5 4}
+.profit-dot.partial{fill:#fff;stroke:#9a763b;stroke-width:2}
+.profit-dot.negative.partial{stroke:#a24a37}

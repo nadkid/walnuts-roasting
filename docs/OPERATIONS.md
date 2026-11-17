@@ -228,8 +228,7 @@ All amounts are integer currency minor units; allocation preserves totals.
 Packaging, payment fees, labor and overhead are intentionally excluded from this
 first version. They can be added as distinct cost categories later. Packing waste,
 manual stock losses, local wholesale sales, café drinks and manual retail stock
-movements are not represented as sale profits. Missing values display a dash,
-never zero; complete-line profit is shown separately when totals are incomplete.
+movements are not represented as sale profits. Cards and By bean totals show each metric’s known subtotal independently. A Partial label and sale-line coverage count identify incomplete totals; a metric stays a dash when none of its amounts are available. Explicit zero amounts remain zero. Gross profit and margin use only the same sale lines with all required information, and never subtract incomplete cost totals from all sales. The profit trend shows those covered amounts, with hollow points/dashed segments for partial periods and gaps where no profit can be calculated. Revenue/cost bars show known amounts with per-metric coverage in their tooltips. Missing values remain a dash in Sales detail and blank in CSV; no financial or stock records are changed by these displays.
 Refunds do not restore physical coffee or automatically reverse its cost. Ambiguous,
 amount-only or unconfirmed refunds require review and block the profit figure.
 

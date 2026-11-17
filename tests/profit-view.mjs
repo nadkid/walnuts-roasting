@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {money,day,dateRange,selectProfit,summarize,periods,csv,bucket,shippingSummary,setProfit,profitPage} from '../static/profit-view.js';
+import {money,day,dateRange,selectProfit,summarize,metricTotal,periods,csv,bucket,shippingSummary,setProfit,profitPage} from '../static/profit-view.js';
 assert.equal(day('2026-11-07T15:00:00Z'),'2026-11-08');
 assert.deepEqual(dateRange('30','2026-11-08'),['2026-10-10','2026-11-08']);
 assert.deepEqual(dateRange('month','2026-11-08'),['2026-11-01','2026-11-08']);
@@ -34,3 +34,39 @@ assert.ok(estimatedHTML.includes('Estimated COGS'));assert.ok(estimatedHTML.incl
 assert.equal(selectProfit([{...row,cost_basis:'estimated'}],{...f,status:'estimated'}).length,1);
 assert.ok(csv([{...row,cost_basis:'estimated',cost_note:'Current price'}]).includes('Current price'));
 console.log('Estimated COGS labels, filter and CSV passed.');
+
+// Each metric has its own coverage; margin uses exactly the profit-covered cohort.
+const mixed=[
+ {...row,id:'known',net_sales_minor:1000,shipping_income_minor:100,bean_cost_minor:200,shipping_cost_minor:50,revenue_minor:1100,profit_minor:850},
+ {...row,id:'missing-sale',status:'incomplete',net_sales_minor:null,shipping_income_minor:50,bean_cost_minor:300,shipping_cost_minor:60,revenue_minor:null,profit_minor:null},
+ {...row,id:'missing-cost',status:'incomplete',net_sales_minor:2000,shipping_income_minor:100,bean_cost_minor:null,shipping_cost_minor:null,revenue_minor:2100,profit_minor:null}
+];
+const partial=summarize(mixed);
+assert.equal(partial.net_sales_minor,null,'a subtotal must not become a complete total');
+assert.deepEqual(metricTotal(partial,'net_sales_minor'),{value:3000,known:2,missing:1,partial:true});
+assert.deepEqual(metricTotal(partial,'bean_cost_minor'),{value:500,known:2,missing:1,partial:true});
+assert.deepEqual(metricTotal(partial,'shipping_cost_minor'),{value:110,known:2,missing:1,partial:true});
+assert.equal(metricTotal(partial,'shipping_income_minor').value,250);
+assert.equal(metricTotal(partial,'profit_minor').value,850);
+assert.equal(partial.covered_margin_pct,850/1100*100,'exclude revenue from lines without calculable profit');
+const unknown={...row,status:'incomplete',...Object.fromEntries(['net_sales_minor','shipping_income_minor','bean_cost_minor','shipping_cost_minor','revenue_minor','profit_minor'].map(k=>[k,null]))};
+assert.equal(metricTotal(summarize([unknown]),'shipping_cost_minor').value,null,'all unknown is not zero');
+assert.equal(metricTotal(summarize([]),'shipping_cost_minor').value,0,'no sales is a known empty total');
+assert.deepEqual(metricTotal(summarize([row,unknown]),'shipping_cost_minor'),{value:0,known:1,missing:1,partial:true},'a recorded zero remains a valid known amount');
+const grouped=periods(mixed,{...f,group:'week'});assert.equal(grouped.length,1);assert.equal(metricTotal(grouped[0],'shipping_cost_minor').value,110);
+setProfit({rows:mixed,currencies:['JPY'],generated_at:state.clock});
+const partialHTML=profitPage(state,renderH);
+const cardHTML=label=>partialHTML.slice(partialHTML.indexOf('<span>'+label),partialHTML.indexOf('</div>',partialHTML.indexOf('<span>'+label)));
+assert.ok(cardHTML('Net bean sales').includes(money(3000)));assert.ok(cardHTML('Actual shipping cost').includes(money(110)));assert.ok(cardHTML('Gross profit').includes(money(850)));
+assert.ok(cardHTML('Net bean sales').includes('Partial'));assert.ok(cardHTML('Net bean sales').includes('2 of 3 sale lines known'));
+assert.ok(cardHTML('Gross profit').includes('77.3% margin on complete lines'));
+assert.ok(partialHTML.includes('Partial · 2/3 lines'),'bean breakdown shows available amounts too');
+assert.match(partialHTML,/class="profit-dot [^"]*partial/,'trend plots covered profit for a partial period');
+assert.ok(partialHTML.includes('1 of 3 complete sale lines'));
+assert.ok(partialHTML.includes('Shipping cost: '+money(110)+' (2 of 3 sale lines known)'));
+setProfit({rows:[unknown],currencies:['JPY'],generated_at:state.clock});
+const unknownHTML=profitPage(state,renderH);assert.ok(unknownHTML.includes('No amounts available'));assert.ok(unknownHTML.includes('no complete sale lines'));
+const loss={...row,bean_cost_minor:1250,profit_minor:-250};setProfit({rows:[loss,unknown],currencies:['JPY'],generated_at:state.clock});
+const lossHTML=profitPage(state,renderH);assert.match(lossHTML,/profit-stat profit-negative/);assert.ok(lossHTML.includes(money(-250)));
+assert.ok(csv(mixed).includes('"incomplete"'));assert.equal(csv(mixed).split('\r\n').length,4,'CSV keeps the original sale lines and missing values');
+console.log('Partial Profit totals: independent coverage, matched margin, unknown/zero/empty values, bean totals, charts, losses and CSV passed.');
